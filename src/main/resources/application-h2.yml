@@ -1,0 +1,26 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:tradedemo;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;DATABASE_TO_LOWER=TRUE;CASE_INSENSITIVE_IDENTIFIERS=TRUE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+        jdbc:
+          time_zone: Asia/Shanghai
+    show-sql: false
+
+demo:
+  seed-on-start: true
+  reset-enabled: true
+  market-maker:
+    enabled: true
+
+logging:
+  level:
+    root: INFO
+    com.clearhub.trade: DEBUG

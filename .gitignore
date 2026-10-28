@@ -1,0 +1,56 @@
+# Java / Maven
+target/
+*.class
+*.jar
+*.war
+*.iml
+.idea/
+.classpath
+.project
+.settings/
+.mvn/
+mvnw
+mvnw.cmd
+
+# Node
+web/node_modules/
+web/.vite/
+node_modules/
+npm-debug.log*
+yarn-error.log*
+# web/dist is committed as a prebuilt artifact for the static nginx image
+
+# Runtime
+*.log
+logs/
+app.log
+app.err.log
+web/vite.log
+hs_err_pid*.log
+replay_pid*.log
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+secrets/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+*.swp
+
+# Local archives
+legacy/private/
+legacy/**/*.rar
+legacy/**/*.zip
+legacy/**/*.7z
+
+# Screenshots are intentionally tracked
+!docs/screenshots/*.png

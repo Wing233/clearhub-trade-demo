@@ -1,0 +1,93 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: clearhub-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-trade_demo}
+      MYSQL_USER: ${MYSQL_USER:-trade}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --default-time-zone=+08:00
+      - --innodb-flush-log-at-trx-commit=1
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks:
+      - clearhub
+    restart: unless-stopped
+
+  trade-core:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: clearhub-trade-core
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: ${MYSQL_DATABASE:-trade_demo}
+      DB_USER: ${MYSQL_USER:-trade}
+      DB_PASSWORD: ${MYSQL_PASSWORD}
+      DEMO_SEED: ${DEMO_SEED:-true}
+      DEMO_RESET_ENABLED: ${DEMO_RESET_ENABLED:-true}
+      DEMO_MM_ENABLED: ${DEMO_MM_ENABLED:-true}
+      JAVA_OPTS: ${JAVA_OPTS:--Xms256m -Xmx512m}
+      TZ: Asia/Shanghai
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - clearhub
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 45s
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: clearhub-web
+    ports:
+      - "${APP_PORT:-8088}:80"
+    depends_on:
+      trade-core:
+        condition: service_healthy
+    networks:
+      - clearhub
+    restart: unless-stopped
+
+  adminer:
+    image: adminer:4
+    container_name: clearhub-adminer
+    profiles: ["tools"]
+    ports:
+      - "${ADMINER_PORT:-8089}:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: mysql
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - clearhub
+    restart: unless-stopped
+
+volumes:
+  mysql-data:
+    name: clearhub-mysql-data
+
+networks:
+  clearhub:
+    driver: bridge
