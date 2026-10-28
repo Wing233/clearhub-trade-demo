@@ -170,5 +170,5 @@ PASS  reset demo data and mock bank  orders=0 trades=0 bank=10000000.0
 - 清算批次、按账户/商品归集、银行结算与对账、出入金通过自动化测试。
 - 清算所适配器与模拟银行链路通过 API 冒烟：回执 `CH-...`、幂等重报、入金/出金 `MB...` 外部流水号、重置同步。
 - 交易终端与清算/银行页面可完成完整演示，生产构建与 Nginx 代理正常。
-- Docker Compose（MySQL 8 + 四个 Java 服务 + Nginx）已在本机完整启动，API 19/19、页面 0 报错。
+- Docker Compose（MySQL 8 + 三个 Java 服务 + Nginx）已在本机完整启动，API 19/19、页面 0 报错。
 - 代码可构建、可测试、可容器化；服务器侧只需复制 `.env.example` 为 `.env`、修改密码、执行 `docker compose up -d --build`。
