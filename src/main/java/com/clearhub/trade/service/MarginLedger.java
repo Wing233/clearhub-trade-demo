@@ -78,6 +78,34 @@ public class MarginLedger {
         writeFlow(account, "TRADE_SELL", proceeds, BigDecimal.ZERO, refType, refId, note);
     }
 
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void credit(Long firmId, BigDecimal amount, String bizCode,
+                       String refType, Long refId, String note) {
+        if (amount.signum() <= 0) {
+            throw new IllegalArgumentException("amount must be positive");
+        }
+        FundsAccount account = lock(firmId);
+        account.setBalance(account.getBalance().add(amount));
+        fundsRepository.save(account);
+        writeFlow(account, bizCode, amount, BigDecimal.ZERO, refType, refId, note);
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void debit(Long firmId, BigDecimal amount, String bizCode,
+                      String refType, Long refId, String note) {
+        if (amount.signum() <= 0) {
+            throw new IllegalArgumentException("amount must be positive");
+        }
+        FundsAccount account = lock(firmId);
+        if (account.available().compareTo(amount) < 0) {
+            throw new BizException(ErrorCode.INSUFFICIENT_FUNDS,
+                    "需要 " + Money.money(amount) + "，可用 " + Money.money(account.available()));
+        }
+        account.setBalance(account.getBalance().subtract(amount));
+        fundsRepository.save(account);
+        writeFlow(account, bizCode, amount.negate(), BigDecimal.ZERO, refType, refId, note);
+    }
+
     private FundsAccount lock(Long firmId) {
         return fundsRepository.findForUpdate(firmId, 1L)
                 .orElseThrow(() -> new BizException(ErrorCode.ACCOUNT_NOT_FOUND, "firmId=" + firmId));

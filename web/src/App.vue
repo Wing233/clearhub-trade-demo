@@ -13,9 +13,11 @@ import TradesTable from './components/TradesTable.vue'
 import PositionsTable from './components/PositionsTable.vue'
 import FundsPanel from './components/FundsPanel.vue'
 import FlowsTable from './components/FlowsTable.vue'
+import ClearingView from './components/ClearingView.vue'
 
 const firms = ref([])
 const firmId = ref(Number(localStorage.getItem('clearhub.firmId') || 2))
+const view = ref('trade')
 const commodities = ref([])
 const currentId = ref(null)
 const book = ref({ bids: [], asks: [] })
@@ -276,6 +278,10 @@ onBeforeUnmount(() => {
         ClearHub
         <span>交易核心演示</span>
       </div>
+      <div class="view-switch">
+        <button :class="{ active: view === 'trade' }" @click="view = 'trade'">交易终端</button>
+        <button :class="{ active: view === 'clearing' }" @click="view = 'clearing'">清算与银行</button>
+      </div>
       <div class="topbar-right">
         <div class="metric">
           <label>交易账户</label>
@@ -299,7 +305,8 @@ onBeforeUnmount(() => {
       </div>
     </header>
 
-    <main class="layout">
+    <template v-if="view === 'trade'">
+      <main class="layout">
       <MarketList :commodities="commodities" :current-id="currentId" @select="selectCommodity" />
 
       <section class="center">
@@ -374,6 +381,9 @@ onBeforeUnmount(() => {
         </el-tabs>
       </div>
     </section>
+    </template>
+
+    <ClearingView v-else :firms="firms" :current-firm-id="firmId" />
 
     <footer class="footer">
       <span>

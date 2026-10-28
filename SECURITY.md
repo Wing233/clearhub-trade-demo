@@ -8,7 +8,8 @@
 |---|---|---|
 | 登录鉴权 | 无 | 任何人可访问页面和 API |
 | 账户身份 | `X-Firm-Id` 请求头 | 可伪造，可操作任意演示账户 |
-| 重置接口 | `POST /api/demo/reset` 默认开启 | 可清空全部交易数据 |
+| 重置接口 | `POST /api/demo/reset` 默认开启 | 可清空全部交易、清算、银行数据 |
+| 银行出入金 | `POST /api/bank/deposit` / `withdraw` 无审批 | 任何人可给任意账户加钱/减钱 |
 | Swagger | 默认开启 `/swagger-ui.html` | 暴露全部接口 |
 | Actuator | 暴露 `health,info,metrics` | 泄露运行信息 |
 | 数据库 | 仅 Compose 内网，未映射宿主端口 | 相对安全 |

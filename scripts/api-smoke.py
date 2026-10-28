@@ -126,6 +126,8 @@ def main():
         commodity = state["commodity"]
         ask = float(state["book"]["asks"][0]["price"])
         price = round(ask + 1, 2)
+        existing = client.get(f"/api/trades?firmId={firm_id}&limit=200")
+        state["last_trade_id"] = max((int(item["id"]) for item in existing), default=0)
         order = client.post(
             "/api/orders",
             {"commodityId": commodity["id"], "side": "BUY", "price": price, "quantity": 1},
@@ -138,14 +140,17 @@ def main():
 
     def wait_trade():
         commodity_id = state["commodity"]["id"]
+        last_trade_id = state.get("last_trade_id", 0)
         deadline = time.time() + 8
         last = []
         while time.time() < deadline:
-            last = client.get(f"/api/trades?firmId={firm_id}&limit=50")
-            if any(int(item["commodityId"]) == int(commodity_id) for item in last):
+            last = client.get(f"/api/trades?firmId={firm_id}&limit=200")
+            if any(int(item["id"]) > last_trade_id
+                   and int(item["commodityId"]) == int(commodity_id)
+                   for item in last):
                 return f"{len(last)} trades"
             time.sleep(0.4)
-        raise AssertionError(f"no trade produced for firm {firm_id}: {last}")
+        raise AssertionError(f"no new trade produced for firm {firm_id}: {last}")
 
     smoke.run("trade is produced", wait_trade)
 
@@ -207,7 +212,12 @@ def main():
         try:
             client.post(
                 "/api/orders",
-                {"commodityId": commodity["id"], "side": "BUY", "price": round(last, 2), "quantity": 100000},
+                {
+                    "commodityId": commodity["id"],
+                    "side": "BUY",
+                    "price": round(last * 1.05, 2),
+                    "quantity": 100000,
+                },
                 firm_id=firm_id,
             )
         except ApiError as error:
@@ -216,6 +226,63 @@ def main():
         raise AssertionError("insufficient funds was not enforced")
 
     smoke.run("insufficient funds rejected", insufficient_funds)
+
+    def clearing_summary():
+        data = client.get("/api/clearing/summary")
+        assert data["unsettledTrades"] >= 1, data
+        state["clearing"] = data
+        return f"unsettled={data['unsettledTrades']} amount={data['unsettledAmount']}"
+
+    smoke.run("clearing summary has unsettled trades", clearing_summary)
+
+    def run_clearing():
+        batch = client.post("/api/clearing/run")
+        assert batch["totalTrades"] >= 1, batch
+        assert batch["details"], batch
+        assert batch["reconciliations"], batch
+        state["batch"] = batch
+        return f"{batch['batchNo']} trades={batch['totalTrades']} firms={batch['firmCount']}"
+
+    smoke.run("run clearing batch", run_clearing)
+
+    def bank_reconciles():
+        accounts = client.get("/api/bank/accounts")
+        assert len(accounts) >= 3, accounts
+        account = next(item for item in accounts if item["firmId"] == firm_id)
+        funds_data = client.get(f"/api/funds?firmId={firm_id}")
+        assert abs(float(account["balance"]) - float(funds_data["balance"])) < 0.0001, {
+            "bank": account["balance"],
+            "ledger": funds_data["balance"],
+        }
+        return f"bank={account['balance']} ledger={funds_data['balance']}"
+
+    smoke.run("bank balance reconciles with ledger", bank_reconciles)
+
+    def bank_deposit():
+        before = client.get(f"/api/funds?firmId={firm_id}")
+        client.post("/api/bank/deposit",
+                    {"firmId": firm_id, "amount": 1000, "remark": "smoke deposit"})
+        after = client.get(f"/api/funds?firmId={firm_id}")
+        assert float(after["balance"]) == float(before["balance"]) + 1000, {
+            "before": before["balance"],
+            "after": after["balance"],
+        }
+        return f"balance {before['balance']} -> {after['balance']}"
+
+    smoke.run("bank deposit updates ledger", bank_deposit)
+
+    def bank_withdraw():
+        before = client.get(f"/api/funds?firmId={firm_id}")
+        client.post("/api/bank/withdraw",
+                    {"firmId": firm_id, "amount": 400, "remark": "smoke withdraw"})
+        after = client.get(f"/api/funds?firmId={firm_id}")
+        assert float(after["balance"]) == float(before["balance"]) - 400, {
+            "before": before["balance"],
+            "after": after["balance"],
+        }
+        return f"balance {before['balance']} -> {after['balance']}"
+
+    smoke.run("bank withdraw updates ledger", bank_withdraw)
 
     def reset():
         client.post("/api/demo/reset")

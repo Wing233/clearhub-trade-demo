@@ -6,6 +6,8 @@
 
 ![交易终端](docs/screenshots/02-after-buy.png)
 
+![清算与对账](docs/screenshots/07-clearing-detail.png)
+
 ## 快速启动
 
 ```bash
@@ -13,7 +15,7 @@ cp .env.example .env      # 修改 MySQL 密码
 docker compose up -d --build
 ```
 
-打开 <http://localhost:8088>。首次启动会创建 14 张表、3 个演示账户、2 个商品，并由模拟做市商持续双边报价。
+打开 <http://localhost:8088>。首次启动会创建 20 张表、3 个演示账户、2 个商品，并由模拟做市商持续双边报价。
 
 > 前端镜像使用仓库内已构建的 `web/dist` 静态产物。修改前端源码后，先执行 `cd web && npm ci && npm run build`，再 `docker compose up -d --build`。
 
@@ -34,7 +36,8 @@ python scripts/api-smoke.py --base-url http://127.0.0.1:8088
 | 行情 | 最新价、开高低、成交量额、买卖盘口、最近成交、价格走势 |
 | 实时 | WebSocket 推送盘口与成交；断线自动重连 + 轮询兜底 |
 | 做市 | 每 3 秒围绕参考价生成 3 档双边报价，保证演示有流动性 |
-| 运维 | 健康检查、演示数据一键重置、Docker Compose 一键部署 |
+| 清算 | 日终批次、按账户/商品归集买卖量额与手续费、生成清算明细 |
+| 银行 | 银行结算账户、入金/出金、清算结算、账户对账与银行流水 || 运维 | 健康检查、演示数据一键重置、Docker Compose 一键部署 |
 
 ## 技术栈
 
@@ -49,8 +52,8 @@ python scripts/api-smoke.py --base-url http://127.0.0.1:8088
 trade-demo/
 ├─ src/main/java/com/clearhub/trade/
 │  ├─ engine/        # 撮合引擎（纯 Java，可单测）
-│  ├─ service/       # 下单、结算、资金、持仓、行情、做市、演示数据
-│  ├─ domain/        # 14 张表的 JPA 实体
+│  ├─ service/       # 下单、结算、资金、持仓、行情、做市、清算、银行、演示数据
+│  ├─ domain/        # 20 张表的 JPA 实体
 │  ├─ repository/    # Spring Data JPA
 │  ├─ web/           # REST 控制器
 │  └─ websocket/     # 盘口/成交推送
@@ -92,6 +95,7 @@ python scripts/ui-smoke.py                    # Playwright 页面冒烟（需先
 - [5 分钟演示脚本](docs/DEMO.md)
 - [服务器部署与运维](docs/DEPLOY.md)
 - [测试报告](docs/TEST-REPORT.md)
+- [验收清单](docs/ACCEPTANCE.md)
 - [与原系统的差异](docs/COMPATIBILITY.md)
 - [安全说明](SECURITY.md)
 

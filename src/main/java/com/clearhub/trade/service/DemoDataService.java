@@ -12,6 +12,9 @@ import com.clearhub.trade.domain.Symbol;
 import com.clearhub.trade.domain.SystemStatus;
 import com.clearhub.trade.domain.TradeDay;
 import com.clearhub.trade.domain.TradeParam;
+import com.clearhub.trade.domain.BankAccount;
+import com.clearhub.trade.repository.BankAccountRepository;
+import com.clearhub.trade.repository.BankTransactionRepository;
 import com.clearhub.trade.repository.CommodityRepository;
 import com.clearhub.trade.repository.CommodityStatusRepository;
 import com.clearhub.trade.repository.FirmRepository;
@@ -21,6 +24,9 @@ import com.clearhub.trade.repository.HoldDetailRepository;
 import com.clearhub.trade.repository.MarketRepository;
 import com.clearhub.trade.repository.PositionRepository;
 import com.clearhub.trade.repository.QuotationRepository;
+import com.clearhub.trade.repository.ReconciliationRepository;
+import com.clearhub.trade.repository.SettlementBatchRepository;
+import com.clearhub.trade.repository.SettlementDetailRepository;
 import com.clearhub.trade.repository.SymbolRepository;
 import com.clearhub.trade.repository.SystemStatusRepository;
 import com.clearhub.trade.repository.TradeDayRepository;
@@ -61,10 +67,16 @@ public class DemoDataService {
     private final TradeRecordRepository tradeRecordRepository;
     private final HoldDetailRepository holdDetailRepository;
     private final FundsFlowRepository fundsFlowRepository;
+    private final BankAccountRepository bankAccountRepository;
+    private final BankTransactionRepository bankTransactionRepository;
+    private final SettlementBatchRepository settlementBatchRepository;
+    private final SettlementDetailRepository settlementDetailRepository;
+    private final ReconciliationRepository reconciliationRepository;
 
     @Transactional
     public void seedIfEmpty() {
         if (firmRepository.count() > 0) {
+            seedMissingBankAccounts();
             log.info("Demo data already present, skip seeding");
             return;
         }
@@ -136,6 +148,11 @@ public class DemoDataService {
 
     @Transactional
     public void resetTradingData() {
+        reconciliationRepository.deleteAllInBatch();
+        settlementDetailRepository.deleteAllInBatch();
+        settlementBatchRepository.deleteAllInBatch();
+        bankTransactionRepository.deleteAllInBatch();
+        bankAccountRepository.deleteAllInBatch();
         fundsFlowRepository.deleteAllInBatch();
         holdDetailRepository.deleteAllInBatch();
         tradeRecordRepository.deleteAllInBatch();
@@ -160,6 +177,14 @@ public class DemoDataService {
             funds.setFrozenFunds(BigDecimal.ZERO);
             fundsRepository.save(funds);
 
+            BankAccount bankAccount = new BankAccount();
+            bankAccount.setFirmId(seed.getId());
+            bankAccount.setAccountNo("BANK-" + seed.getCode());
+            bankAccount.setBankName("演示结算银行");
+            bankAccount.setBalance(seed.getCash() == null ? BigDecimal.ZERO : seed.getCash());
+            bankAccount.setStatus(0);
+            bankAccountRepository.save(bankAccount);
+
             for (Map.Entry<Long, BigDecimal> entry : initialPrices.entrySet()) {
                 Position position = new Position();
                 position.setFirmId(seed.getId());
@@ -183,6 +208,23 @@ public class DemoDataService {
             quotation.setVolume(BigDecimal.ZERO);
             quotation.setAmount(BigDecimal.ZERO);
             quotationRepository.save(quotation);
+        }
+    }
+
+    private void seedMissingBankAccounts() {
+        for (Firm firm : firmRepository.findAllByOrderByIdAsc()) {
+            if (bankAccountRepository.findByFirmId(firm.getId()).isPresent()) {
+                continue;
+            }
+            BankAccount account = new BankAccount();
+            account.setFirmId(firm.getId());
+            account.setAccountNo("BANK-" + firm.getCode());
+            account.setBankName("演示结算银行");
+            account.setBalance(fundsRepository.findByFirmIdAndSymbolId(firm.getId(), 1L)
+                    .map(FundsAccount::getBalance)
+                    .orElse(BigDecimal.ZERO));
+            account.setStatus(0);
+            bankAccountRepository.save(account);
         }
     }
 

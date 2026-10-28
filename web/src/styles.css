@@ -596,3 +596,120 @@ body {
     flex-direction: column;
   }
 }
+
+.view-switch {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.view-switch button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 7px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.16s ease;
+}
+
+.view-switch button.active {
+  background: rgba(79, 140, 255, 0.16);
+  color: var(--text);
+}
+
+.clearing-view {
+  padding: 14px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1;
+}
+
+.clearing-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px;
+}
+
+.clearing-hero h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+}
+
+.clearing-hero p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.hero-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.clearing-cards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.clear-card {
+  background: linear-gradient(180deg, rgba(19, 29, 47, 0.92), rgba(15, 23, 38, 0.92));
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.clear-card label {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.6px;
+}
+
+.clear-card strong {
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+}
+
+.clear-card span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.clearing-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
+  gap: 14px;
+}
+
+.sub-head {
+  margin-top: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+@media (max-width: 1200px) {
+  .clearing-cards {
+    grid-template-columns: 1fr 1fr;
+  }
+  .clearing-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.clearing-view .el-table .cell {
+  white-space: nowrap;
+}
+
+.clearing-view .el-table {
+  font-size: 12px;
+}

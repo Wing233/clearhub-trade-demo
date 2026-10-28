@@ -18,4 +18,11 @@ public interface TradeRecordRepository extends JpaRepository<TradeRecord, Long> 
 
     @Query("select coalesce(sum(t.quantity), 0) from TradeRecord t")
     BigDecimal sumQuantity();
+
+    List<TradeRecord> findBySettledBatchIdIsNullOrderByIdAsc();
+
+    long countBySettledBatchIdIsNull();
+
+    @Query("select coalesce(sum(t.amount), 0) from TradeRecord t where t.settledBatchId is null")
+    BigDecimal sumUnsettledAmount();
 }

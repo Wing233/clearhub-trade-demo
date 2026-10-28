@@ -35,6 +35,15 @@ export const api = {
     http.post('/api/orders', payload, { headers: { 'X-Firm-Id': firmId } }),
   cancel: (firmId, orderId) =>
     http.post(`/api/orders/${orderId}/cancel`, null, { headers: { 'X-Firm-Id': firmId } }),
+  clearingSummary: () => http.get('/api/clearing/summary'),
+  clearingRun: () => http.post('/api/clearing/run'),
+  clearingBatches: (limit = 20) => http.get('/api/clearing/batches', { params: { limit } }),
+  clearingBatch: (batchId) => http.get(`/api/clearing/batches/${batchId}`),
+  bankAccounts: () => http.get('/api/bank/accounts'),
+  bankTransactions: (firmId = null, limit = 100) =>
+    http.get('/api/bank/transactions', { params: { firmId, limit } }),
+  bankDeposit: (payload) => http.post('/api/bank/deposit', payload),
+  bankWithdraw: (payload) => http.post('/api/bank/withdraw', payload),
   reset: () => http.post('/api/demo/reset'),
   status: () => http.get('/api/demo/status'),
 }

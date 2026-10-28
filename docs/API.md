@@ -186,7 +186,122 @@ Base URL：`http://<host>:8088`（Nginx）或 `http://<host>:8080`（后端直�
 { "status": "UP", "components": { "db": { "status": "UP" }, "ping": { "status": "UP" } } }
 ```
 
-## 5. WebSocket
+## 5. 清算
+
+### GET /api/clearing/summary
+
+未清算成交数/金额、最近批次、银行/内部资金合计。
+
+```json
+{
+  "code": 0,
+  "data": {
+    "unsettledTrades": 1,
+    "unsettledAmount": 100.04,
+    "lastBatchNo": "CL20261028182019143183",
+    "lastBatchTime": "2026-10-28 18:20:19",
+    "bankTotal": 120000000.00,
+    "ledgerTotal": 119999999.80
+  }
+}
+```
+
+### POST /api/clearing/run
+
+把当前未清算成交归集为一个批次，并按内部资金余额同步银行结算账户。
+
+```json
+{
+  "code": 0,
+  "data": {
+    "id": 1,
+    "batchNo": "CL20261028182019143183",
+    "tradeDay": "20260101",
+    "status": "COMPLETED",
+    "totalTrades": 1,
+    "totalAmount": 100.04,
+    "totalFee": 0.10,
+    "firmCount": 2,
+    "details": [
+      {
+        "firmId": 2,
+        "firmName": "演示用户",
+        "commodityCode": "DEMO-A",
+        "openingQty": 100000,
+        "buyQty": 2,
+        "sellQty": 0,
+        "closingQty": 100002,
+        "fee": 0.05,
+        "netAmount": -100.09
+      }
+    ],
+    "reconciliations": [
+      {
+        "firmId": 2,
+        "firmName": "演示用户",
+        "ledgerBalance": 9999899.91,
+        "bankBalance": 10000000.00,
+        "settledAmount": -100.09,
+        "difference": -100.09,
+        "status": "SETTLED"
+      }
+    ]
+  }
+}
+```
+
+> `difference` 是清算前“内部余额 − 银行余额”；`settledAmount` 是本次结算转账金额；结算后银行余额等于内部余额。`status=MATCH` 表示无需转账，`SETTLED` 表示已通过结算交易抹平。
+
+### GET /api/clearing/batches?limit=20
+
+批次列表（不含明细）。
+
+### GET /api/clearing/batches/{batchId}
+
+单个批次，含 `details` 与 `reconciliations`。
+
+## 6. 银行
+
+### GET /api/bank/accounts
+
+```json
+{
+  "code": 0,
+  "data": [
+    {
+      "id": 1,
+      "firmId": 1,
+      "firmName": "做市商账户",
+      "accountNo": "BANK-MM001",
+      "bankName": "演示结算银行",
+      "balance": 100000200.08,
+      "status": 0
+    }
+  ]
+}
+```
+
+### GET /api/bank/transactions?firmId=2&limit=100
+
+银行流水，`type` 为 `DEPOSIT` / `WITHDRAW` / `SETTLE`。
+
+### POST /api/bank/deposit
+
+```json
+{ "firmId": 2, "amount": 1000, "remark": "演示入金" }
+```
+
+同时更新 `fu_account_funds` 与 `bank_account`，写资金流水和银行流水。返回银行流水号。
+
+### POST /api/bank/withdraw
+
+```json
+{ "firmId": 2, "amount": 400, "remark": "演示出金" }
+```
+
+校验内部可用资金与银行余额；成功后同步扣减两个账户。
+
+## 7. WebSocket
 
 连接：`ws://<host>:8088/ws/market`
 
@@ -230,7 +345,7 @@ Base URL：`http://<host>:8088`（Nginx）或 `http://<host>:8080`（后端直�
 
 前端在断线后 3 秒重连；同时每 3 秒轮询行情作为兜底。
 
-## 6. 错误码
+## 8. 错误码
 
 | code | 含义 |
 |---|---|
@@ -248,6 +363,6 @@ Base URL：`http://<host>:8088`（Nginx）或 `http://<host>:8080`（后端直�
 | 40012 | 重复请求 |
 | 50000 | 系统内部错误 |
 
-## 7. Swagger
+## 9. Swagger
 
 后端启动后访问 `http://<host>:8088/swagger-ui.html`（经 Nginx 代理）或 `http://<host>:8080/swagger-ui.html`。

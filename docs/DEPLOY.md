@@ -72,6 +72,19 @@ python3 scripts/api-smoke.py --base-url http://127.0.0.1:8088
 
 ## 5. 日常运维
 
+### 升级已有环境
+
+- 新版本增加了清算/银行 5 张表与 `sec_trade.settled_batch_id`。
+- 全新部署：`db/init/01-schema.sql` 已包含，无需额外操作。
+- 已有数据卷升级：
+  ```bash
+  docker compose exec -T mysql sh -c \
+    'exec mysql -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' < db/migration/02-clearing.sql
+  docker compose up -d --build
+  ```
+  或者演示环境直接 `docker compose down -v && docker compose up -d --build`（会清空数据）。
+- 迁移脚本只应执行一次；重复执行 `ADD COLUMN` 会报列已存在。
+
 ```bash
 docker compose ps
 docker compose logs -f --tail=200 trade-core

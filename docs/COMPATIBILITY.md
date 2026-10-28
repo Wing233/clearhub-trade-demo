@@ -28,14 +28,15 @@
 
 | 模块 | 原因 |
 |---|---|
-| `OrderService` / `SettlementService` | 原 `MakeService` 依赖 5 个校验服务、8 张策略表、MQ 与 Redis；演示版收敛为 14 张表 |
+| `OrderService` / `SettlementService` | 原 `MakeService` 依赖 5 个校验服务、8 张策略表、MQ 与 Redis；演示版收敛为 20 张表 |
 | `MarginLedger` | `MarginLib` 为私有 jar，无法获得；按原语义重写最小实现 |
 | `PositionService` | 原持仓逻辑分散在 `TradeSaveService`；演示版集中到独立服务 |
 | 查询 API | 原交易服务只有 POST 写接口，无 GET 查询 |
 | WebSocket | 原系统用 WebSocket 做登录/通知；演示版用于盘口/成交推送 |
 | 前端 | 原系统无交易前端；本项目新写 Vue 3 交易终端 |
 | 模拟做市商 | 原系统依赖外部挂牌/做市；演示版内置双边报价 |
-| 建表脚本 | 原仓库无 MySQL DDL；本项目按实体与原生 SQL 反推 14 张表 |
+| 清算与银行 | 原系统清算/银行依赖真实通道、SFTP、清算文件；演示版用 5 张表重建简化版 |
+| 建表脚本 | 原仓库无 MySQL DDL；本项目按实体与原生 SQL 反推 20 张表 |
 
 ## 4. 表结构映射
 
@@ -51,17 +52,17 @@
 | `fu_account_funds` | 同名 | 保留余额、冻结、币种、版本；去掉市场/银行相关列 |
 | `fu_account_funds_flow` | 同名 | 保留业务码、金额、冻结变动、余额快照、关联单号 |
 | `sec_strategy_default` + 7 张子表 | `trade_param` | 合并为手续费率、保证金率（固定 0）、单笔上限、涨跌停 |
-| `clear_*` / `fb_*` / `qd_*` | 未纳入 | 银行签约、出入金、对账、清算不在本演示范围 |
+| `clear_*` / `fb_*` / `qd_*` | `clear_settlement_batch` / `clear_settlement_detail` / `clear_reconciliation` / `bank_account` / `bank_transaction` | 不复用原表；按演示需要重建 5 张简化清算/银行表。真实银行签约、出入金、对账文件、SFTP 未纳入 |
 
 ## 5. 有意省略的能力
 
 - 卖空、杠杆、保证金交易、逐日盯市；
 - 交割、提货、仓单、配售、点价、协议转让；
-- 银行签约/出入金/对账/清算文件/SFTP；
+- 真实银行通道、银行签约、清算文件/SFTP、多边净额、日切/夜盘；
 - UUMS/Shiro 权限、网关会话、审计日志；
 - 配置中心、注册中心、Redis、RabbitMQ、MongoDB；
 - 多市场、多币种、多交易节、夜盘；
-- 日终结算、结算价、手续费分级、印花税。
+- 真实日终结算价、手续费分级、印花税。
 
 ## 6. 行为差异
 
@@ -73,6 +74,8 @@
 | 行情 | Redis + DB + 推送 | 内存盘口 + DB 行情 + WebSocket |
 | 自成交 | `tradeSelf` 开关 | 默认禁止，同 firm 停止撮合 |
 | 手续费 | 多策略表、按商品/账户 | 单一费率 `trade_param.fee_rate` |
+| 清算 | 真实清算所/银行通道、清算文件、SFTP | 本地批次归集 + 结算账户同步 |
+| 对账 | 银行文件/适配器明细 | 内部资金余额 vs 银行结算账户余额 |
 | 鉴权 | 网关会话 + UUMS | 无，演示用 `X-Firm-Id` |
 
 ## 7. 匿名化与合规

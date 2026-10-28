@@ -20,7 +20,7 @@
 ## 2. 自动化测试（mvn test）
 
 命令：`mvn -B test`  
-结果：**11 / 11 通过，0 失败，0 错误**
+结果：**14 / 14 通过，0 失败，0 错误**
 
 ### 2.1 撮合引擎单测（6 个）
 
@@ -48,6 +48,16 @@
 | 涨跌停 | 买入 200，返回 `40007` |
 | 持仓不足 | 先卖 60000 冻结，再卖 60000，返回 `40004` |
 
+### 2.3 清算与银行集成测试（3 个）
+
+`src/test/java/com/clearhub/trade/service/ClearingIntegrationTest.java`
+
+| 用例 | 断言 |
+|---|---|
+| 清算归集 | 1 笔 100×5 成交生成 1 个批次、2 条明细；买方净额 −500.25，卖方净额 +499.75；2 条对账记录均为 SETTLED；银行余额与内部余额一致；成交标记已清算 |
+| 重复清算 | 同一批成交已标记，第二次清算批次成交数为 0、明细为空 |
+| 出入金 | 入金 1000、出金 400 后内部资金与银行余额同步；超额出金返回 `40003` |
+
 ## 3. 页面冒烟（Playwright）
 
 脚本：`scripts/ui-smoke.py`  
@@ -63,7 +73,9 @@
 | 我的成交 | 1 行 |
 | 持仓 | 2 行（两个商品） |
 | 资金流水 | 2 行（冻结 + 成交扣款） |
-| 截图 | `docs/screenshots/01~05` |
+| 清算页 | 未清算 1 笔、执行清算、批次/明细/对账 4 行 |
+| 银行页 | 3 个银行账户、入金 500、银行流水 3 行 |
+| 截图 | `docs/screenshots/01~08` |
 
 ## 4. 手工 API 验证
 
@@ -109,16 +121,21 @@ PASS  actuator health  UP
 PASS  list accounts  3 accounts
 PASS  list commodities  DEMO-A last=100.0
 PASS  order book has two sides  bids=3 asks=3
-PASS  place crossing buy  order #37 101.3
+PASS  place crossing buy  order #37 101.04
 PASS  trade is produced  1 trades
 PASS  position updated  quantity=100001.0
-PASS  place resting buy and freeze funds  order #48 frozen=95.05
+PASS  place resting buy and freeze funds  order #38 frozen=95.05
 PASS  cancel releases frozen funds  cancelled, frozen=0
 PASS  price limit rejected  rejected with 40007
 PASS  insufficient funds rejected  rejected with 40003
-PASS  reset demo data  orders=0 trades=0
+PASS  clearing summary has unsettled trades  unsettled=1 amount=100.04
+PASS  run clearing batch  CL20261028182019143183 trades=1 firms=2
+PASS  bank balance reconciles with ledger  bank=9999899.91 ledger=9999899.91
+PASS  bank deposit updates ledger  balance 9999899.91 -> 10000899.91
+PASS  bank withdraw updates ledger  balance 10000899.91 -> 10000499.91
+PASS  reset demo data  orders=1 trades=0
 
-12/12 checks passed
+17/17 checks passed
 ```
 
 页面冒烟（生产 Nginx 静态产物 `http://127.0.0.1:8088`）：
@@ -126,8 +143,10 @@ PASS  reset demo data  orders=0 trades=0
 - 盘口 3 档买 / 3 档卖；
 - 下单 2 手后成交 1 条；
 - 持仓 2 条、资金流水 2 条；
+- 清算页：未清算 1 笔、批次 1 条、明细/对账 4 行；
+- 银行页：3 个账户、入金 500、银行流水 3 条；
 - `console error` / `pageerror` 均为 0；
-- 截图见 `docs/screenshots/01~05`。
+- 截图见 `docs/screenshots/01~08`。
 
 > 说明：前端镜像使用仓库内已构建的 `web/dist` 静态产物，避免在 Docker 内运行 npm。若修改了前端源码，先在宿主机执行 `cd web && npm ci && npm run build`，再 `docker compose up -d --build`。
 
@@ -143,6 +162,7 @@ PASS  reset demo data  orders=0 trades=0
 ## 7. 结论
 
 - 撮合规则、冻结/扣款/解冻、持仓更新、涨跌停与资金校验均通过自动化测试。
-- 交易终端可完成“看盘 → 下单 → 成交 → 持仓 → 流水 → 撤单 → 重置”的完整演示。
-- Docker Compose（MySQL 8 + 后端 + Nginx）已在本机完整启动，API 12/12、页面 0 报错。
+- 清算批次、按账户/商品归集、银行结算与对账、出入金通过自动化测试。
+- 交易终端可完成“看盘 → 下单 → 成交 → 持仓 → 流水 → 撤单 → 重置”的完整演示；清算页可完成“执行清算 → 查看明细/对账 → 入金/出金”。
+- Docker Compose（MySQL 8 + 后端 + Nginx）已在本机完整启动，API 17/17、页面 0 报错。
 - 代码可构建、可测试、可容器化；服务器侧只需复制 `.env.example` 为 `.env`、修改密码、执行 `docker compose up -d --build`。

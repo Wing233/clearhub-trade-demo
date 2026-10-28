@@ -24,7 +24,7 @@ flowchart LR
 |---|---|
 | `engine` | 纯 Java 撮合引擎：`MatchEngine`、`MatcherWorker`、`BookOrder`、`Match`、`BookSnapshot` |
 | `service` | `OrderService`（下单/撤单）、`SettlementService`（成交结算）、`MarginLedger`（资金）、`PositionService`（持仓）、`QuotationService`（行情）、`MatcherService`（撮合线程管理）、`MarketMakerService`（做市）、`DemoDataService`（种子/重置） |
-| `domain` | 14 张表的 JPA 实体 |
+| `domain` | 20 张表的 JPA 实体 |
 | `repository` | Spring Data JPA，关键查询使用悲观锁 |
 | `web` | REST 控制器，统一 `{code,message,data}` 响应 |
 | `websocket` | `/ws/market`，按商品订阅盘口/成交 |
@@ -120,8 +120,13 @@ sequenceDiagram
 | `sec_hold_detail` | 买入持仓明细 |
 | `sec_quotation` | 行情 |
 | `trade_param` | 手续费率、单笔上限、涨跌停参数 |
+| `clear_settlement_batch` | 日终清算批次 |
+| `clear_settlement_detail` | 按账户/商品的清算明细 |
+| `clear_reconciliation` | 清算前银行余额、结算金额、对账结果 |
+| `bank_account` | 银行结算账户（与内部资金账户一一对应） |
+| `bank_transaction` | 入金 / 出金 / 清算结算流水 |
 
-> 原系统的 `sec_strategy_*` 8 张策略表被合并为 `trade_param`；原系统的 `clear_*`、`fb_*` 银行/清算表未纳入本演示。
+> 原系统的 `sec_strategy_*` 8 张策略表被合并为 `trade_param`；原系统的 `clear_*`、`fb_*` 银行/清算表未直接复用，本项目按演示需要重建了 5 张清算/银行表。
 
 ## 6. 并发与事务
 
@@ -139,14 +144,56 @@ sequenceDiagram
 - 使用独立账户（默认 `firm_id=1`），与演示用户隔离；禁止自成交，因此不会自己和自己成交。
 - 可通过 `DEMO_MM_ENABLED=false` 关闭。
 
-## 8. 演示数据重置
+## 8. 清算与银行
 
-`POST /api/demo/reset` 的执行顺序：
+### 8.1 日终清算
+
+- `POST /api/clearing/run` 取所有 `sec_trade.settled_batch_id is null` 的成交；
+- 按 `(firm_id, commodity_id)` 归集买入/卖出数量、金额、手续费；
+- 期初 = 期末持仓 − 买入 + 卖出；期末 = 当前持仓；
+- 净额 = 卖出金额 − 买入金额 − 手续费；
+- 写入 `clear_settlement_batch` / `clear_settlement_detail`；
+- 成交标记 `settled_batch_id`，重复清算不会重复归集。
+
+### 8.2 银行结算与对账
+
+- 每个账户有一个 `bank_account`，初始余额 = 初始资金；
+- 清算时按账户把银行余额同步到内部资金余额，差额写入 `bank_transaction(type=SETTLE)`；
+- `clear_reconciliation` 记录清算前银行余额、结算金额、差额和状态；
+- 入金/出金同时更新内部资金和银行账户，写 `bank_transaction(DEPOSIT/WITHDRAW)`；
+- 对账口径：清算后 `bank_account.balance == fu_account_funds.balance`。
+
+```mermaid
+sequenceDiagram
+  participant C as 清算页
+  participant S as ClearingService
+  participant T as sec_trade
+  participant B as BankService
+  participant DB as MySQL
+  C->>S: POST /api/clearing/run
+  S->>T: 取 settled_batch_id is null
+  S->>DB: 写批次 + 明细（按 firm/commodity 归集）
+  loop 每个账户
+    S->>B: settle(firmId, ledgerBalance)
+    B->>DB: bank_account.balance = ledgerBalance
+    B->>DB: bank_transaction(SETTLE)
+    S->>DB: clear_reconciliation
+  end
+  S->>T: 标记 settled_batch_id
+  S-->>C: 批次 + 明细 + 对账
+```
+
+> 这是演示级清算：不做真实银行通道、不做多边净额、不做日切/夜盘；银行账户是“结算账户”的简化模型。
+
+## 9. 演示数据重置
+
+执行顺序：
 
 1. 停止所有撮合线程；
 2. 清空做市商内存报价；
-3. 删除成交、委托、持仓、资金、流水；
-4. 重建 3 个账户的资金与持仓、重置行情；
-5. 重启撮合线程。
+3. 删除清算批次/明细/对账、银行流水/账户；
+4. 删除成交、委托、持仓、资金流水；
+5. 重建账户资金/持仓/银行账户、重置行情；
+6. 重启撮合线程。
 
 重置后做市商会自动重新报价。该接口仅用于演示，生产环境应关闭。

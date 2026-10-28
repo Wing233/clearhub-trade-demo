@@ -56,5 +56,32 @@ with sync_playwright() as p:
     print("flow rows:", page.locator(".el-tab-pane:visible .el-table__body tr").count())
     page.screenshot(path=os.path.join(OUT, "05-flows.png"), full_page=True)
 
+    # ---- clearing view ----
+    page.get_by_role("button", name="清算与银行").click()
+    page.wait_for_selector(".clearing-cards", timeout=10000)
+    page.wait_for_timeout(1500)
+    print("clearing summary:", page.locator(".clear-card").all_inner_texts())
+    print("run enabled:", page.get_by_role("button", name="执行日终清算").is_enabled())
+    page.screenshot(path=os.path.join(OUT, "06-clearing.png"), full_page=True)
+
+    page.get_by_role("button", name="执行日终清算").click()
+    page.wait_for_timeout(500)
+    page.get_by_role("button", name="执行", exact=True).click()
+    page.wait_for_timeout(2500)
+    batch_rows = page.locator(".clearing-grid .panel").first.locator(".el-table__body tr").count()
+    detail_rows = page.locator(".clearing-grid .panel").nth(1).locator(".el-table__body tr").count()
+    print("batch rows:", batch_rows, "detail/recon rows:", detail_rows)
+    page.screenshot(path=os.path.join(OUT, "07-clearing-detail.png"), full_page=True)
+
+    # ---- bank deposit ----
+    page.get_by_role("button", name="入金").first.click()
+    page.wait_for_selector(".el-dialog", timeout=5000)
+    page.locator(".el-dialog .el-input-number input").fill("500")
+    page.locator(".el-dialog .el-input-number input").press("Enter")
+    page.get_by_role("button", name="确认", exact=True).click()
+    page.wait_for_timeout(2000)
+    print("bank transactions rows:", page.locator(".panel").last.locator(".el-table__body tr").count())
+    page.screenshot(path=os.path.join(OUT, "08-bank.png"), full_page=True)
+
     print("errors:", json.dumps(errors, ensure_ascii=False, indent=2))
     browser.close()

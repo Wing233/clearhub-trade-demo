@@ -61,6 +61,9 @@ public class TradeRecord {
     @Column(name = "trade_day", nullable = false, length = 16)
     private String tradeDay;
 
+    @Column(name = "settled_batch_id")
+    private Long settledBatchId;
+
     @CreationTimestamp
     @Column(name = "create_time", updatable = false)
     private LocalDateTime createTime;
