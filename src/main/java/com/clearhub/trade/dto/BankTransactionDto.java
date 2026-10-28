@@ -15,6 +15,7 @@ public class BankTransactionDto {
     private String typeLabel;
     private BigDecimal amount;
     private BigDecimal balanceAfter;
+    private String externalRef;
     private String remark;
     private LocalDateTime createTime;
 }

@@ -21,6 +21,13 @@ const batches = ref([])
 const selectedBatch = ref(null)
 const accounts = ref([])
 const transactions = ref([])
+const integration = ref({
+  enabled: false,
+  status: '--',
+  institution: '',
+  mockBankStatus: '--',
+  accounts: [],
+})
 const loading = ref(false)
 const running = ref(false)
 const dialogVisible = ref(false)
@@ -49,10 +56,24 @@ const loadTransactions = async () => {
   transactions.value = await api.bankTransactions(null, 100)
 }
 
+const loadIntegration = async () => {
+  try {
+    integration.value = await api.integrationStatus()
+  } catch (error) {
+    integration.value = { enabled: false, status: 'DOWN', mockBankStatus: 'DOWN', accounts: [] }
+  }
+}
+
 const loadAll = async () => {
   loading.value = true
   try {
-    await Promise.all([loadSummary(), loadBatches(), loadAccounts(), loadTransactions()])
+    await Promise.all([
+      loadSummary(),
+      loadBatches(),
+      loadAccounts(),
+      loadTransactions(),
+      loadIntegration(),
+    ])
   } catch (error) {
     ElMessage.error(error.message)
   } finally {
@@ -116,7 +137,7 @@ const submitBank = async () => {
       ElMessage.success('出金成功')
     }
     dialogVisible.value = false
-    await Promise.all([loadSummary(), loadAccounts(), loadTransactions()])
+    await Promise.all([loadSummary(), loadAccounts(), loadTransactions(), loadIntegration()])
   } catch (error) {
     ElMessage.error(error.message)
   } finally {
@@ -124,7 +145,23 @@ const submitBank = async () => {
   }
 }
 
+const reportBatch = async () => {
+  if (!selectedBatch.value) return
+  try {
+    selectedBatch.value = await api.clearingReport(selectedBatch.value.id)
+    ElMessage.success('已重新上报清算所')
+    await Promise.all([loadBatches(), loadIntegration()])
+  } catch (error) {
+    ElMessage.error(error.message)
+  }
+}
+
 const statusType = (status) => (status === 'MATCH' ? 'success' : 'warning')
+const externalType = (status) => {
+  if (status === 'ACCEPTED' || status === 'LOCAL') return 'success'
+  if (status === 'PARTIAL') return 'warning'
+  return 'danger'
+}
 const typeType = (type) => {
   if (type === 'DEPOSIT') return 'success'
   if (type === 'WITHDRAW') return 'warning'
@@ -145,6 +182,13 @@ onMounted(loadAll)
       <div>
         <h2>清算与银行</h2>
         <p>成交归集 → 日终清算 → 银行结算账户对账 / 出入金</p>
+        <div class="channel-status">
+          <span class="status-dot" :class="integration.status === 'UP' ? 'ok' : 'warn'"></span>
+          清算所适配器 {{ integration.status }}
+          <span class="status-dot" :class="integration.mockBankStatus === 'UP' ? 'ok' : 'warn'"></span>
+          模拟银行 {{ integration.mockBankStatus }}
+          <span class="muted" v-if="integration.institution">（{{ integration.institution }}）</span>
+        </div>
       </div>
       <div class="hero-actions">
         <el-button size="small" @click="loadAll">刷新</el-button>
@@ -194,15 +238,27 @@ onMounted(loadAll)
           highlight-current-row
           @row-click="selectBatch"
         >
-          <el-table-column label="批次号" min-width="190" prop="batchNo" />
-          <el-table-column label="交易日" width="100" prop="tradeDay" />
-          <el-table-column label="成交" width="70" align="right" prop="totalTrades" />
-          <el-table-column label="金额" width="120" align="right">
+          <el-table-column label="批次号" min-width="170" prop="batchNo" />
+          <el-table-column label="成交" width="56" align="right" prop="totalTrades" />
+          <el-table-column label="金额" width="100" align="right">
             <template #default="{ row }">{{ fmt(row.totalAmount) }}</template>
           </el-table-column>
-          <el-table-column label="状态" width="90">
+          <el-table-column label="状态" width="88">
             <template #default="{ row }">
               <el-tag size="small" type="success" effect="dark">{{ row.status }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="清算所回执" width="110">
+            <template #default="{ row }">
+              <el-tag
+                v-if="row.externalStatus"
+                size="small"
+                :type="externalType(row.externalStatus)"
+                effect="dark"
+              >
+                {{ row.externalStatus }}
+              </el-tag>
+              <span v-else class="muted">--</span>
             </template>
           </el-table-column>
         </el-table>
@@ -214,6 +270,21 @@ onMounted(loadAll)
           <span>{{ selectedBatch?.batchNo || '--' }}</span>
         </div>
         <template v-if="selectedBatch">
+          <div class="external-bar">
+            <span>清算所回执</span>
+            <el-tag
+              size="small"
+              :type="externalType(selectedBatch.externalStatus)"
+              effect="dark"
+            >
+              {{ selectedBatch.externalStatus || '--' }}
+            </el-tag>
+            <span class="mono">{{ selectedBatch.externalRef || '--' }}</span>
+            <span class="muted" v-if="selectedBatch.externalMessage">
+              {{ selectedBatch.externalMessage }}
+            </span>
+            <el-button link type="primary" size="small" @click="reportBatch">重新上报</el-button>
+          </div>
           <el-table :data="selectedBatch.details" max-height="220" empty-text="该批次无成交明细">
             <el-table-column label="账户" min-width="110">
               <template #default="{ row }">{{ row.firmName }}</template>
@@ -313,6 +384,7 @@ onMounted(loadAll)
             <el-tag size="small" :type="typeType(row.type)" effect="plain">{{ row.typeLabel }}</el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="外部流水号" width="190" prop="externalRef" />
         <el-table-column label="金额" width="140" align="right">
           <template #default="{ row }">
             <span :class="changeClass(row.amount)">{{ signText(row.amount) }}</span>

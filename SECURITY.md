@@ -10,6 +10,8 @@
 | 账户身份 | `X-Firm-Id` 请求头 | 可伪造，可操作任意演示账户 |
 | 重置接口 | `POST /api/demo/reset` 默认开启 | 可清空全部交易、清算、银行数据 |
 | 银行出入金 | `POST /api/bank/deposit` / `withdraw` 无审批 | 任何人可给任意账户加钱/减钱 |
+| 外部通道 | `clearing-adapter:8090` / `mock-bank:8091` 仅 Compose 内网 | 若映射到宿主，任何人可直接调账/重置 |
+| 适配器协议 | JSON/HTTP + 请求号，无签名/证书 | 演示协议，非真实银行/清算所 |
 | Swagger | 默认开启 `/swagger-ui.html` | 暴露全部接口 |
 | Actuator | 暴露 `health,info,metrics` | 泄露运行信息 |
 | 数据库 | 仅 Compose 内网，未映射宿主端口 | 相对安全 |
@@ -33,8 +35,8 @@
 4. **限制 Actuator**：只保留 `health`，并考虑关闭 `show-details`。
 5. **HTTPS**：Caddy 自动证书，或 Nginx + certbot。
 6. **限流**：在 Nginx/Caddy 层限制 `/api/orders` 的速率。
-7. **只开 8088/443**：不要暴露 3306、8080、8089。
-8. **定期重置**：演示前用页面按钮或 `down -v` 恢复干净数据。
+7. **只开 8088/443**：不要暴露 3306、8080、8089、8090、8091。
+8. **定期重置**：演示前用页面按钮或 `down -v` 恢复干净数据；重置会同时重置模拟银行。
 
 ## 3. 凭据管理
 
@@ -49,6 +51,7 @@
 - 没有请求签名/防重放；下单接口可被脚本刷。
 - 没有审计日志；只有应用日志。
 - 没有输入长度/频率限制；`quantity`/`price` 有业务上限，但没有 HTTP 层限流。
+- 适配器与模拟银行没有签名、证书、IP 白名单；仅适合内网演示。
 - WebSocket 允许所有 Origin（`setAllowedOriginPatterns("*")`），公网部署应改为具体域名。
 - 重置接口无二次确认 token，只有前端确认框。
 

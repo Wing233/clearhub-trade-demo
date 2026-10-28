@@ -222,6 +222,10 @@ Base URL：`http://<host>:8088`（Nginx）或 `http://<host>:8080`（后端直�
     "totalAmount": 100.04,
     "totalFee": 0.10,
     "firmCount": 2,
+    "externalRef": "CH-CL20261028182019143183",
+    "externalStatus": "ACCEPTED",
+    "externalMessage": "clearing accepted",
+    "externalTime": "2026-10-28 18:20:19",
     "details": [
       {
         "firmId": 2,
@@ -260,6 +264,14 @@ Base URL：`http://<host>:8088`（Nginx）或 `http://<host>:8080`（后端直�
 
 单个批次，含 `details` 与 `reconciliations`。
 
+### POST /api/clearing/batches/{batchId}/report
+
+向清算所适配器重新上报该批次；使用 `CH-<batchNo>` 作为幂等键，重复上报不会重复调账。
+
+```json
+{ "code": 0, "data": { "batchNo": "CL...", "externalStatus": "ACCEPTED", "externalRef": "CH-CL..." } }
+```
+
 ## 6. 银行
 
 ### GET /api/bank/accounts
@@ -283,7 +295,7 @@ Base URL：`http://<host>:8088`（Nginx）或 `http://<host>:8080`（后端直�
 
 ### GET /api/bank/transactions?firmId=2&limit=100
 
-银行流水，`type` 为 `DEPOSIT` / `WITHDRAW` / `SETTLE`。
+银行流水，`type` 为 `DEPOSIT` / `WITHDRAW` / `SETTLE`；`externalRef` 为模拟银行流水号或清算回执号。
 
 ### POST /api/bank/deposit
 
@@ -291,7 +303,7 @@ Base URL：`http://<host>:8088`（Nginx）或 `http://<host>:8080`（后端直�
 { "firmId": 2, "amount": 1000, "remark": "演示入金" }
 ```
 
-同时更新 `fu_account_funds` 与 `bank_account`，写资金流水和银行流水。返回银行流水号。
+先调用清算所适配器 → 模拟银行，成功后再更新 `fu_account_funds` 与 `bank_account`，写资金流水和银行流水。返回银行流水号；失败时返回 `50001`，本地不落账。
 
 ### POST /api/bank/withdraw
 
@@ -299,9 +311,48 @@ Base URL：`http://<host>:8088`（Nginx）或 `http://<host>:8080`（后端直�
 { "firmId": 2, "amount": 400, "remark": "演示出金" }
 ```
 
-校验内部可用资金与银行余额；成功后同步扣减两个账户。
+校验内部可用资金与银行余额后，经适配器调用模拟银行；成功后同步扣减两个账户。
 
-## 7. WebSocket
+## 7. 外部通道
+
+### GET /api/integration/status
+
+清算所适配器、模拟银行状态与模拟银行账户。
+
+```json
+{
+  "code": 0,
+  "data": {
+    "enabled": true,
+    "status": "UP",
+    "institution": "DEMO-CLEARING",
+    "mockBankStatus": "UP",
+    "accounts": [
+      { "firmId": 2, "accountNo": "BANK-DEMO001", "balance": 10000000.00 }
+    ]
+  }
+}
+```
+
+### GET /api/integration/accounts
+
+仅返回适配器侧（模拟银行）账户余额，便于与本地 `bank_account` 对账。
+
+### 内部通道接口（不映射宿主端口）
+
+| 服务 | 方法 | 路径 | 说明 |
+|---|---|---|---|
+| clearing-adapter | POST | `/adapter/bank/deposit` | 入金 |
+| clearing-adapter | POST | `/adapter/bank/withdraw` | 出金 |
+| clearing-adapter | POST | `/adapter/clearing/settle` | 清算上报 |
+| clearing-adapter | POST | `/adapter/reset` | 重置模拟银行 |
+| clearing-adapter | GET | `/adapter/health` | 适配器/银行状态 |
+| mock-bank | POST | `/mock-bank/deposit` | 模拟银行入金 |
+| mock-bank | POST | `/mock-bank/withdraw` | 模拟银行出金 |
+| mock-bank | POST | `/mock-bank/adjust` | 清算调账 |
+| mock-bank | GET | `/mock-bank/accounts` | 账户余额 |
+
+## 8. WebSocket
 
 连接：`ws://<host>:8088/ws/market`
 
@@ -345,7 +396,7 @@ Base URL：`http://<host>:8088`（Nginx）或 `http://<host>:8080`（后端直�
 
 前端在断线后 3 秒重连；同时每 3 秒轮询行情作为兜底。
 
-## 8. 错误码
+## 9. 错误码
 
 | code | 含义 |
 |---|---|
@@ -362,7 +413,8 @@ Base URL：`http://<host>:8088`（Nginx）或 `http://<host>:8080`（后端直�
 | 40011 | 商品不存在 |
 | 40012 | 重复请求 |
 | 50000 | 系统内部错误 |
+| 50001 | 外部通道失败 |
 
-## 9. Swagger
+## 10. Swagger
 
 后端启动后访问 `http://<host>:8088/swagger-ui.html`（经 Nginx 代理）或 `http://<host>:8080/swagger-ui.html`。

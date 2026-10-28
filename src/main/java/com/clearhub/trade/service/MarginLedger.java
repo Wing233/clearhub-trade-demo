@@ -106,6 +106,11 @@ public class MarginLedger {
         writeFlow(account, bizCode, amount.negate(), BigDecimal.ZERO, refType, refId, note);
     }
 
+    @Transactional(propagation = Propagation.MANDATORY)
+    public BigDecimal available(Long firmId) {
+        return lock(firmId).available();
+    }
+
     private FundsAccount lock(Long firmId) {
         return fundsRepository.findForUpdate(firmId, 1L)
                 .orElseThrow(() -> new BizException(ErrorCode.ACCOUNT_NOT_FOUND, "firmId=" + firmId));

@@ -12,6 +12,8 @@ help:
 
 build:
 	mvn -B -DskipTests package
+	cd services/mock-bank && mvn -B -DskipTests package
+	cd services/clearing-adapter && mvn -B -DskipTests package
 	cd web && npm ci --no-audit --no-fund && npm run build
 
 test:
@@ -38,4 +40,6 @@ reset:
 
 clean:
 	mvn -B clean
+	cd services/mock-bank && mvn -B clean
+	cd services/clearing-adapter && mvn -B clean
 	rm -rf web/dist

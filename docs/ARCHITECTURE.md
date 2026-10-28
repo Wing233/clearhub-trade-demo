@@ -10,21 +10,28 @@ flowchart LR
   A --> DB[(MySQL 8)]
   A --> M[模拟做市商]
   M -->|下单/撤单| A
+  A -->|入金/出金/清算上报| AD[clearing-adapter :8090]
+  AD -->|JSON/HTTP| MB[mock-bank :8091]
+  MB --> DB
 ```
 
-单进程、单库，去掉了原系统的配置中心、注册中心、Redis、RabbitMQ 和微服务拆分，保留交易核心的三条主链路：
+交易核心保持单进程、共享一个 MySQL；外部通道拆成两个独立服务：`clearing-adapter` 对平台提供统一适配接口，`mock-bank` 模拟银行侧账户与流水。
+
+主要链路：
 
 1. **下单**：校验 → 冻结资金/持仓 → 落库 → 提交撮合队列
 2. **撮合**：每个商品一个撮合线程，价格优先/时间优先，成交价取被动方
 3. **结算**：成交落库 → 更新委托/持仓/资金 → 更新行情 → WebSocket 推送
+4. **清算/银行**：日终批次 → 适配器上报清算所 → 模拟银行调账 → 对账/出入金
 
 ## 2. 代码分层
 
 | 包 | 职责 |
 |---|---|
 | `engine` | 纯 Java 撮合引擎：`MatchEngine`、`MatcherWorker`、`BookOrder`、`Match`、`BookSnapshot` |
-| `service` | `OrderService`（下单/撤单）、`SettlementService`（成交结算）、`MarginLedger`（资金）、`PositionService`（持仓）、`QuotationService`（行情）、`MatcherService`（撮合线程管理）、`MarketMakerService`（做市）、`DemoDataService`（种子/重置） |
-| `domain` | 20 张表的 JPA 实体 |
+| `service` | `OrderService`（下单/撤单）、`SettlementService`（成交结算）、`MarginLedger`（资金）、`PositionService`（持仓）、`QuotationService`（行情）、`MatcherService`（撮合线程管理）、`MarketMakerService`（做市）、`ClearingService`（清算）、`BankService`（银行）、`DemoDataService`（种子/重置） |
+| `integration` | `AdapterClient` 与适配器 DTO；`AdapterClient` 负责超时、失败消息、状态查询 |
+| `domain` | 22 张表的 JPA 实体 |
 | `repository` | Spring Data JPA，关键查询使用悲观锁 |
 | `web` | REST 控制器，统一 `{code,message,data}` 响应 |
 | `websocket` | `/ws/market`，按商品订阅盘口/成交 |
@@ -125,6 +132,8 @@ sequenceDiagram
 | `clear_reconciliation` | 清算前银行余额、结算金额、对账结果 |
 | `bank_account` | 银行结算账户（与内部资金账户一一对应） |
 | `bank_transaction` | 入金 / 出金 / 清算结算流水 |
+| `mock_bank_account` | 模拟银行账户（独立服务的余额表） |
+| `mock_bank_transaction` | 模拟银行流水（请求号唯一，支持幂等） |
 
 > 原系统的 `sec_strategy_*` 8 张策略表被合并为 `trade_param`；原系统的 `clear_*`、`fb_*` 银行/清算表未直接复用，本项目按演示需要重建了 5 张清算/银行表。
 
@@ -144,7 +153,7 @@ sequenceDiagram
 - 使用独立账户（默认 `firm_id=1`），与演示用户隔离；禁止自成交，因此不会自己和自己成交。
 - 可通过 `DEMO_MM_ENABLED=false` 关闭。
 
-## 8. 清算与银行
+## 8. 清算、适配器与模拟银行
 
 ### 8.1 日终清算
 
@@ -153,15 +162,38 @@ sequenceDiagram
 - 期初 = 期末持仓 − 买入 + 卖出；期末 = 当前持仓；
 - 净额 = 卖出金额 − 买入金额 − 手续费；
 - 写入 `clear_settlement_batch` / `clear_settlement_detail`；
-- 成交标记 `settled_batch_id`，重复清算不会重复归集。
+- 通过 `clearing-adapter` 上报清算所，回执写入 `external_ref` / `external_status` / `external_time`；
+- 成交标记 `settled_batch_id`，重复清算不会重复归集；
+- 上报失败/部分失败时，页面可「重新上报」；`clearingRef = CH-<batchNo>` 作为幂等键。
 
 ### 8.2 银行结算与对账
 
 - 每个账户有一个 `bank_account`，初始余额 = 初始资金；
-- 清算时按账户把银行余额同步到内部资金余额，差额写入 `bank_transaction(type=SETTLE)`；
+- 入金/出金：先调用适配器 → 模拟银行，成功后再更新内部资金与银行账户；外部流水号写入 `bank_transaction.external_ref`；
+- 清算时按账户把银行余额同步到内部资金余额，差额写入 `bank_transaction(type=SETTLE)`，同时适配器通知模拟银行按 `settledAmount` 调账；
 - `clear_reconciliation` 记录清算前银行余额、结算金额、差额和状态；
-- 入金/出金同时更新内部资金和银行账户，写 `bank_transaction(DEPOSIT/WITHDRAW)`；
-- 对账口径：清算后 `bank_account.balance == fu_account_funds.balance`。
+- 对账口径：清算后 `bank_account.balance == fu_account_funds.balance`，且与模拟银行账户余额一致。
+
+### 8.3 清算所适配器与模拟银行
+
+| 服务 | 端口 | 职责 |
+|---|---|---|
+| `clearing-adapter` | 8090 | 平台侧统一接口：银行出入金、清算上报、回执、状态查询；负责请求号与失败聚合 |
+| `mock-bank` | 8091 | 模拟银行账户、余额、流水；`requestId` 唯一，支持幂等入金/出金/清算调账 |
+
+适配器接口：
+
+- `GET /adapter/health`：适配器 + 模拟银行状态；
+- `POST /adapter/bank/deposit`、`/withdraw`：调用模拟银行并返回 `externalRef`；
+- `POST /adapter/clearing/settle`：按账户调用模拟银行 `adjust`，返回 `clearingRef`、`ACCEPTED/PARTIAL/FAILED`；
+- `POST /adapter/reset`：重置模拟银行；
+- `GET /adapter/accounts`：查看模拟银行账户。
+
+模拟银行接口：
+
+- `POST /mock-bank/deposit`、`/withdraw`、`/adjust`；
+- `GET /mock-bank/accounts`、`/transactions`；
+- `POST /mock-bank/reset`。
 
 ```mermaid
 sequenceDiagram
@@ -169,21 +201,29 @@ sequenceDiagram
   participant S as ClearingService
   participant T as sec_trade
   participant B as BankService
+  participant AD as clearing-adapter
+  participant MB as mock-bank
   participant DB as MySQL
   C->>S: POST /api/clearing/run
   S->>T: 取 settled_batch_id is null
   S->>DB: 写批次 + 明细（按 firm/commodity 归集）
   loop 每个账户
-    S->>B: settle(firmId, ledgerBalance)
+    S->>B: settle(firmId, ledgerBalance, CH-batchNo)
     B->>DB: bank_account.balance = ledgerBalance
     B->>DB: bank_transaction(SETTLE)
     S->>DB: clear_reconciliation
   end
+  S->>AD: POST /adapter/clearing/settle
+  AD->>MB: adjust(accountNo, settledAmount)
+  MB-->>AD: externalRef
+  AD-->>S: clearingRef + ACCEPTED
+  S->>DB: 写 external_ref/status
   S->>T: 标记 settled_batch_id
   S-->>C: 批次 + 明细 + 对账
 ```
 
-> 这是演示级清算：不做真实银行通道、不做多边净额、不做日切/夜盘；银行账户是“结算账户”的简化模型。
+> 这是演示级实现：适配器与模拟银行都是本地 JSON/HTTP 服务，不接真实银行/清算所；不做多边净额、日切/夜盘、清算文件/SFTP。  
+> 两个通道服务只监听 Compose 内网，不映射宿主端口。
 
 ## 9. 演示数据重置
 
@@ -194,6 +234,7 @@ sequenceDiagram
 3. 删除清算批次/明细/对账、银行流水/账户；
 4. 删除成交、委托、持仓、资金流水；
 5. 重建账户资金/持仓/银行账户、重置行情；
-6. 重启撮合线程。
+6. 调用适配器重置模拟银行；
+7. 重启撮合线程。
 
 重置后做市商会自动重新报价。该接口仅用于演示，生产环境应关闭。

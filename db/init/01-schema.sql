@@ -206,6 +206,10 @@ CREATE TABLE IF NOT EXISTS clear_settlement_batch (
   total_amount DECIMAL(20,4) NOT NULL DEFAULT 0,
   total_fee DECIMAL(20,4) NOT NULL DEFAULT 0,
   firm_count INT NOT NULL DEFAULT 0,
+  external_ref VARCHAR(64) DEFAULT NULL,
+  external_status VARCHAR(16) DEFAULT NULL,
+  external_message VARCHAR(255) DEFAULT NULL,
+  external_time DATETIME DEFAULT NULL,
   start_time DATETIME DEFAULT NULL,
   end_time DATETIME DEFAULT NULL,
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -270,10 +274,44 @@ CREATE TABLE IF NOT EXISTS bank_transaction (
   type VARCHAR(16) NOT NULL,
   amount DECIMAL(20,4) NOT NULL,
   balance_after DECIMAL(20,4) NOT NULL,
+  external_ref VARCHAR(64) DEFAULT NULL,
   remark VARCHAR(255) DEFAULT NULL,
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uk_bank_txn_no (txn_no),
   KEY idx_bank_txn_firm (firm_id, create_time),
   KEY idx_bank_txn_type (type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE IF NOT EXISTS mock_bank_account (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  firm_id BIGINT NOT NULL,
+  account_no VARCHAR(40) NOT NULL,
+  bank_name VARCHAR(64) NOT NULL,
+  currency VARCHAR(8) NOT NULL DEFAULT 'CNY',
+  balance DECIMAL(20,4) NOT NULL DEFAULT 0,
+  status TINYINT NOT NULL DEFAULT 0,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_mock_bank_account_no (account_no),
+  UNIQUE KEY uk_mock_bank_firm (firm_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE IF NOT EXISTS mock_bank_transaction (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  txn_no VARCHAR(40) NOT NULL,
+  request_id VARCHAR(64) NOT NULL,
+  firm_id BIGINT NOT NULL,
+  account_no VARCHAR(40) NOT NULL,
+  type VARCHAR(16) NOT NULL,
+  amount DECIMAL(20,4) NOT NULL,
+  balance_after DECIMAL(20,4) NOT NULL,
+  ref_no VARCHAR(64) DEFAULT NULL,
+  remark VARCHAR(255) DEFAULT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_mock_bank_request (request_id),
+  UNIQUE KEY uk_mock_bank_txn_no (txn_no),
+  KEY idx_mock_bank_account (account_no, create_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

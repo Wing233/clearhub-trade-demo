@@ -713,3 +713,44 @@ body {
 .clearing-view .el-table {
   font-size: 12px;
 }
+
+.channel-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--muted);
+  flex-wrap: wrap;
+}
+
+.status-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.status-dot.ok {
+  background: var(--down);
+  box-shadow: 0 0 8px rgba(33, 196, 122, 0.6);
+}
+
+.status-dot.warn {
+  background: var(--warn);
+}
+
+.external-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--muted);
+  flex-wrap: wrap;
+}
+
+.external-bar .mono {
+  color: var(--text);
+}

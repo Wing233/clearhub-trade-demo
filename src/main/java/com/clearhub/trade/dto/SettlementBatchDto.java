@@ -16,6 +16,10 @@ public class SettlementBatchDto {
     private BigDecimal totalAmount;
     private BigDecimal totalFee;
     private Integer firmCount;
+    private String externalRef;
+    private String externalStatus;
+    private String externalMessage;
+    private LocalDateTime externalTime;
     private LocalDateTime startTime;
     private LocalDateTime endTime;
     private LocalDateTime createTime;

@@ -1,0 +1,27 @@
+server:
+  port: ${SERVER_PORT:8090}
+
+spring:
+  application:
+    name: clearing-adapter
+  jackson:
+    time-zone: Asia/Shanghai
+    date-format: yyyy-MM-dd HH:mm:ss
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+adapter:
+  institution: DEMO-CLEARING
+  mock-bank-base-url: ${MOCK_BANK_BASE_URL:http://127.0.0.1:8091}
+  timeout-ms: ${ADAPTER_TIMEOUT_MS:5000}
+
+logging:
+  level:
+    com.clearhub.adapter: INFO

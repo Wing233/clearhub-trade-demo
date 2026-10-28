@@ -51,6 +51,11 @@ springdoc:
     tags-sorter: alpha
     operations-sorter: method
 
+integration:
+  enabled: ${INTEGRATION_ENABLED:true}
+  adapter-base-url: ${ADAPTER_BASE_URL:http://127.0.0.1:8090}
+  timeout-ms: ${ADAPTER_TIMEOUT_MS:5000}
+
 demo:
   seed-on-start: ${DEMO_SEED:true}
   reset-enabled: ${DEMO_RESET_ENABLED:true}

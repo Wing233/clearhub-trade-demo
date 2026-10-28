@@ -103,9 +103,11 @@ docker compose ps
 结果：
 
 ```
-clearhub-mysql        Up (healthy)   3306/tcp, 33060/tcp
-clearhub-trade-core   Up (healthy)   8080/tcp
-clearhub-web          Up             0.0.0.0:8088->80/tcp
+clearhub-mysql             Up (healthy)   3306/tcp, 33060/tcp
+clearhub-mock-bank         Up (healthy)   8091/tcp
+clearhub-clearing-adapter  Up (healthy)   8090/tcp
+clearhub-trade-core        Up (healthy)   8080/tcp
+clearhub-web               Up             0.0.0.0:8088->80/tcp
 ```
 
 健康检查：
@@ -119,23 +121,25 @@ API 冒烟（经 Nginx → trade-core → MySQL）：
 ```
 PASS  actuator health  UP
 PASS  list accounts  3 accounts
-PASS  list commodities  DEMO-A last=100.0
+PASS  list commodities  DEMO-A last=100.26
+PASS  clearing adapter and mock bank are up  adapter=UP mockBank=UP
 PASS  order book has two sides  bids=3 asks=3
-PASS  place crossing buy  order #37 101.04
-PASS  trade is produced  1 trades
-PASS  position updated  quantity=100001.0
-PASS  place resting buy and freeze funds  order #38 frozen=95.05
+PASS  place crossing buy  order #1337 101.08
+PASS  trade is produced  2 trades
+PASS  position updated  quantity=100003.0
+PASS  place resting buy and freeze funds  order #1345 frozen=95.3
 PASS  cancel releases frozen funds  cancelled, frozen=0
 PASS  price limit rejected  rejected with 40007
 PASS  insufficient funds rejected  rejected with 40003
-PASS  clearing summary has unsettled trades  unsettled=1 amount=100.04
-PASS  run clearing batch  CL20261028182019143183 trades=1 firms=2
-PASS  bank balance reconciles with ledger  bank=9999899.91 ledger=9999899.91
-PASS  bank deposit updates ledger  balance 9999899.91 -> 10000899.91
-PASS  bank withdraw updates ledger  balance 10000899.91 -> 10000499.91
-PASS  reset demo data  orders=1 trades=0
+PASS  clearing summary has unsettled trades  unsettled=1 amount=100.08
+PASS  run clearing batch and report to adapter  CL20261028192216808090 trades=1 ref=CH-CL20261028192216808090
+PASS  retry clearing report is idempotent  idempotent ref=CH-CL20261028192216808090
+PASS  bank balance reconciles with ledger  bank=9999699.25 ledger=9999699.25 ref=CH-CL20261028192216808090
+PASS  bank deposit through adapter  balance 9999699.25 -> 10000699.25 ref=MB20261028192217558130
+PASS  bank withdraw through adapter  balance 10000699.25 -> 10000299.25 ref=MB20261028192217755823
+PASS  reset demo data and mock bank  orders=0 trades=0 bank=10000000.0
 
-17/17 checks passed
+19/19 checks passed
 ```
 
 页面冒烟（生产 Nginx 静态产物 `http://127.0.0.1:8088`）：
@@ -143,26 +147,28 @@ PASS  reset demo data  orders=1 trades=0
 - 盘口 3 档买 / 3 档卖；
 - 下单 2 手后成交 1 条；
 - 持仓 2 条、资金流水 2 条；
-- 清算页：未清算 1 笔、批次 1 条、明细/对账 4 行；
-- 银行页：3 个账户、入金 500、银行流水 3 条；
+- 清算页：通道状态「清算所适配器 UP / 模拟银行 UP」、未清算 1 笔、批次 1 条、明细/对账 4 行、回执 `ACCEPTED`；
+- 银行页：3 个账户、入金 500、银行流水 3 条、清算结算流水带 `CH-...` 外部流水号；
 - `console error` / `pageerror` 均为 0；
 - 截图见 `docs/screenshots/01~08`。
 
-> 说明：前端镜像使用仓库内已构建的 `web/dist` 静态产物，避免在 Docker 内运行 npm。若修改了前端源码，先在宿主机执行 `cd web && npm ci && npm run build`，再 `docker compose up -d --build`。
+> 说明：前端镜像使用仓库内已构建的 `web/dist` 静态产物。若修改了前端源码，建议在服务器上用 `cd web && npm ci && npm run build` 重新构建；本机因内存紧张使用了 `web/Dockerfile.build` 在 Node 22 容器内构建并导出 `dist`。
 
 ## 6. 已知告警
 
 | 告警 | 影响 | 处理 |
 |---|---|---|
-| 前端 bundle 2.15 MB（gzip 712 KB） | 首屏略慢 | 演示可接受；后续可按需引入 Element Plus / ECharts 或拆 vendor |
+| 前端 bundle 2.16 MB（gzip 715 KB） | 首屏略慢 | 演示可接受；后续可按需引入 Element Plus / ECharts 或拆 vendor |
 | H2 关闭时 `Database is already closed` | 仅测试退出日志 | 已在 H2 URL 加 `DB_CLOSE_ON_EXIT=FALSE` |
 | 模拟做市商每 3 秒撤挂 | 委托/流水增长较快 | 演示可接受；长时间运行可加历史清理任务 |
-| 无鉴权 | 任何人可下单/重置 | 演示环境；公网部署前按 SECURITY.md 加固 |
+| 适配器/模拟银行为内存+MySQL 实现 | 非真实机构 | 演示用途；真实接入需替换为银行/清算所协议 |
+| 无鉴权 | 任何人可下单/重置/出入金 | 演示环境；公网部署前按 SECURITY.md 加固 |
 
 ## 7. 结论
 
 - 撮合规则、冻结/扣款/解冻、持仓更新、涨跌停与资金校验均通过自动化测试。
 - 清算批次、按账户/商品归集、银行结算与对账、出入金通过自动化测试。
-- 交易终端可完成“看盘 → 下单 → 成交 → 持仓 → 流水 → 撤单 → 重置”的完整演示；清算页可完成“执行清算 → 查看明细/对账 → 入金/出金”。
-- Docker Compose（MySQL 8 + 后端 + Nginx）已在本机完整启动，API 17/17、页面 0 报错。
+- 清算所适配器与模拟银行链路通过 API 冒烟：回执 `CH-...`、幂等重报、入金/出金 `MB...` 外部流水号、重置同步。
+- 交易终端与清算/银行页面可完成完整演示，生产构建与 Nginx 代理正常。
+- Docker Compose（MySQL 8 + 四个 Java 服务 + Nginx）已在本机完整启动，API 19/19、页面 0 报错。
 - 代码可构建、可测试、可容器化；服务器侧只需复制 `.env.example` 为 `.env`、修改密码、执行 `docker compose up -d --build`。

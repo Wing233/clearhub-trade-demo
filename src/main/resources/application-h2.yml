@@ -20,6 +20,9 @@ demo:
   market-maker:
     enabled: true
 
+integration:
+  enabled: false
+
 logging:
   level:
     root: INFO

@@ -17,7 +17,8 @@ public enum ErrorCode {
     ACCOUNT_NOT_FOUND(40010, "交易账户不存在"),
     COMMODITY_NOT_FOUND(40011, "商品不存在"),
     DUPLICATE_REQUEST(40012, "重复请求"),
-    INTERNAL(50000, "系统内部错误");
+    INTERNAL(50000, "系统内部错误"),
+    CHANNEL_ERROR(50001, "外部通道失败");
 
     private final int code;
     private final String message;

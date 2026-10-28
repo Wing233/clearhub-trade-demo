@@ -43,6 +43,9 @@ public class BankTransaction {
     @Column(name = "balance_after", nullable = false, precision = 20, scale = 4)
     private BigDecimal balanceAfter;
 
+    @Column(name = "external_ref", length = 64)
+    private String externalRef;
+
     @Column(length = 255)
     private String remark;
 

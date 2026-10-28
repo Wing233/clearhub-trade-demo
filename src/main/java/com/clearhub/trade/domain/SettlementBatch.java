@@ -46,6 +46,18 @@ public class SettlementBatch {
     @Column(name = "firm_count", nullable = false)
     private Integer firmCount = 0;
 
+    @Column(name = "external_ref", length = 64)
+    private String externalRef;
+
+    @Column(name = "external_status", length = 16)
+    private String externalStatus;
+
+    @Column(name = "external_message", length = 255)
+    private String externalMessage;
+
+    @Column(name = "external_time")
+    private LocalDateTime externalTime;
+
     @Column(name = "start_time")
     private LocalDateTime startTime;
 

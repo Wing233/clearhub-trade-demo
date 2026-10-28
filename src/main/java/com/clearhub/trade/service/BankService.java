@@ -10,6 +10,10 @@ import com.clearhub.trade.dto.BankAccountDto;
 import com.clearhub.trade.dto.BankRequest;
 import com.clearhub.trade.dto.BankSettlementResult;
 import com.clearhub.trade.dto.BankTransactionDto;
+import com.clearhub.trade.integration.AdapterBankRequest;
+import com.clearhub.trade.integration.AdapterBankResponse;
+import com.clearhub.trade.integration.AdapterClient;
+import com.clearhub.trade.integration.IntegrationProperties;
 import com.clearhub.trade.repository.BankAccountRepository;
 import com.clearhub.trade.repository.BankTransactionRepository;
 import com.clearhub.trade.repository.FirmRepository;
@@ -25,6 +29,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -40,40 +45,53 @@ public class BankService {
     private final BankTransactionRepository bankTransactionRepository;
     private final FirmRepository firmRepository;
     private final MarginLedger marginLedger;
+    private final AdapterClient adapterClient;
+    private final IntegrationProperties integrationProperties;
 
     @Transactional
     public BankTransaction deposit(BankRequest request) {
         BankAccount account = lockAccount(request.getFirmId());
-        marginLedger.credit(request.getFirmId(), Money.money(request.getAmount()),
+        BigDecimal amount = Money.money(request.getAmount());
+        String externalRef = callAdapter("DEPOSIT", account, amount);
+        marginLedger.credit(request.getFirmId(), amount,
                 "BANK_DEPOSIT", "BANK", account.getId(), request.getRemark());
-        account.setBalance(Money.money(account.getBalance().add(request.getAmount())));
+        account.setBalance(Money.money(account.getBalance().add(amount)));
         bankAccountRepository.save(account);
-        return record(account, "DEPOSIT", Money.money(request.getAmount()), request.getRemark());
+        return record(account, "DEPOSIT", amount, request.getRemark(), externalRef);
     }
 
     @Transactional
     public BankTransaction withdraw(BankRequest request) {
         BankAccount account = lockAccount(request.getFirmId());
         BigDecimal amount = Money.money(request.getAmount());
-        marginLedger.debit(request.getFirmId(), amount,
-                "BANK_WITHDRAW", "BANK", account.getId(), request.getRemark());
         if (account.getBalance().compareTo(amount) < 0) {
             throw new BizException(ErrorCode.INSUFFICIENT_FUNDS, "银行账户余额不足");
         }
+        if (marginLedger.available(request.getFirmId()).compareTo(amount) < 0) {
+            throw new BizException(ErrorCode.INSUFFICIENT_FUNDS, "可用资金不足");
+        }
+        String externalRef = callAdapter("WITHDRAW", account, amount);
+        marginLedger.debit(request.getFirmId(), amount,
+                "BANK_WITHDRAW", "BANK", account.getId(), request.getRemark());
         account.setBalance(Money.money(account.getBalance().subtract(amount)));
         bankAccountRepository.save(account);
-        return record(account, "WITHDRAW", amount.negate(), request.getRemark());
+        return record(account, "WITHDRAW", amount.negate(), request.getRemark(), externalRef);
     }
 
     @Transactional(propagation = Propagation.MANDATORY)
     public BankSettlementResult settle(Long firmId, BigDecimal ledgerBalance, String batchNo) {
+        return settle(firmId, ledgerBalance, batchNo, null);
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public BankSettlementResult settle(Long firmId, BigDecimal ledgerBalance, String batchNo, String externalRef) {
         BankAccount account = lockAccount(firmId);
         BigDecimal before = account.getBalance();
         BigDecimal settled = Money.money(ledgerBalance.subtract(before));
         account.setBalance(Money.money(ledgerBalance));
         bankAccountRepository.save(account);
         if (settled.signum() != 0) {
-            record(account, "SETTLE", settled, "清算批次 " + batchNo);
+            record(account, "SETTLE", settled, "清算批次 " + batchNo, externalRef);
         }
         return new BankSettlementResult(before, settled, account.getBalance());
     }
@@ -118,6 +136,7 @@ public class BankService {
                     dto.setAmount(txn.getAmount());
                     dto.setBalanceAfter(txn.getBalanceAfter());
                     dto.setRemark(txn.getRemark());
+                    dto.setExternalRef(txn.getExternalRef());
                     dto.setCreateTime(txn.getCreateTime());
                     return dto;
                 })
@@ -132,6 +151,11 @@ public class BankService {
     }
 
     private BankTransaction record(BankAccount account, String type, BigDecimal amount, String remark) {
+        return record(account, type, amount, remark, null);
+    }
+
+    private BankTransaction record(BankAccount account, String type, BigDecimal amount,
+                                   String remark, String externalRef) {
         BankTransaction txn = new BankTransaction();
         txn.setTxnNo("B" + LocalDateTime.now().format(TXN_FORMAT)
                 + String.format("%03d", ThreadLocalRandom.current().nextInt(1000)));
@@ -141,7 +165,34 @@ public class BankService {
         txn.setAmount(Money.money(amount));
         txn.setBalanceAfter(Money.money(account.getBalance()));
         txn.setRemark(remark);
+        txn.setExternalRef(externalRef);
         return bankTransactionRepository.save(txn);
+    }
+
+    private String callAdapter(String action, BankAccount account, BigDecimal amount) {
+        if (!integrationProperties.isEnabled()) {
+            return null;
+        }
+        AdapterBankRequest request = new AdapterBankRequest(
+                "BANK-" + action + "-" + UUID.randomUUID(),
+                account.getFirmId(),
+                account.getAccountNo(),
+                amount
+        );
+        try {
+            AdapterBankResponse response = "DEPOSIT".equals(action)
+                    ? adapterClient.deposit(request)
+                    : adapterClient.withdraw(request);
+            if (response == null || !response.isSuccess()) {
+                throw new BizException(ErrorCode.CHANNEL_ERROR,
+                        "银行通道失败：" + (response == null ? "empty response" : response.getMessage()));
+            }
+            return response.getExternalRef();
+        } catch (BizException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw new BizException(ErrorCode.CHANNEL_ERROR, "银行通道失败：" + ex.getMessage());
+        }
     }
 
     private String typeLabel(String type) {

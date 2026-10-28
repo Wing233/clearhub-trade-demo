@@ -40,10 +40,15 @@ services:
       DEMO_SEED: ${DEMO_SEED:-true}
       DEMO_RESET_ENABLED: ${DEMO_RESET_ENABLED:-true}
       DEMO_MM_ENABLED: ${DEMO_MM_ENABLED:-true}
+      INTEGRATION_ENABLED: ${INTEGRATION_ENABLED:-true}
+      ADAPTER_BASE_URL: http://clearing-adapter:8090
+      ADAPTER_TIMEOUT_MS: ${ADAPTER_TIMEOUT_MS:-5000}
       JAVA_OPTS: ${JAVA_OPTS:--Xms256m -Xmx512m}
       TZ: Asia/Shanghai
     depends_on:
       mysql:
+        condition: service_healthy
+      clearing-adapter:
         condition: service_healthy
     networks:
       - clearhub
@@ -54,6 +59,55 @@ services:
       timeout: 5s
       retries: 10
       start_period: 45s
+
+  mock-bank:
+    build:
+      context: ./services/mock-bank
+      dockerfile: Dockerfile
+    container_name: clearhub-mock-bank
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: ${MYSQL_DATABASE:-trade_demo}
+      DB_USER: ${MYSQL_USER:-trade}
+      DB_PASSWORD: ${MYSQL_PASSWORD}
+      JAVA_OPTS: ${MOCK_BANK_JAVA_OPTS:--Xms128m -Xmx256m}
+      TZ: Asia/Shanghai
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - clearhub
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8091/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+
+  clearing-adapter:
+    build:
+      context: ./services/clearing-adapter
+      dockerfile: Dockerfile
+    container_name: clearhub-clearing-adapter
+    environment:
+      MOCK_BANK_BASE_URL: http://mock-bank:8091
+      ADAPTER_TIMEOUT_MS: ${ADAPTER_TIMEOUT_MS:-5000}
+      JAVA_OPTS: ${ADAPTER_JAVA_OPTS:--Xms128m -Xmx256m}
+      TZ: Asia/Shanghai
+    depends_on:
+      mock-bank:
+        condition: service_healthy
+    networks:
+      - clearhub
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8090/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
 
   web:
     build:

@@ -25,7 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 
-@SpringBootTest(properties = "demo.market-maker.enabled=false")
+@SpringBootTest(properties = {"demo.market-maker.enabled=false", "integration.enabled=false"})
 @ActiveProfiles("h2")
 class OrderFlowIntegrationTest {
 

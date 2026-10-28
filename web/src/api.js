@@ -39,6 +39,8 @@ export const api = {
   clearingRun: () => http.post('/api/clearing/run'),
   clearingBatches: (limit = 20) => http.get('/api/clearing/batches', { params: { limit } }),
   clearingBatch: (batchId) => http.get(`/api/clearing/batches/${batchId}`),
+  clearingReport: (batchId) => http.post(`/api/clearing/batches/${batchId}/report`),
+  integrationStatus: () => http.get('/api/integration/status'),
   bankAccounts: () => http.get('/api/bank/accounts'),
   bankTransactions: (firmId = null, limit = 100) =>
     http.get('/api/bank/transactions', { params: { firmId, limit } }),

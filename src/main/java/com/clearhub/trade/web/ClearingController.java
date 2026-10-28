@@ -40,4 +40,9 @@ public class ClearingController {
     public ApiResponse<SettlementBatchDto> batch(@PathVariable Long batchId) {
         return ApiResponse.ok(clearingService.getBatch(batchId));
     }
+
+    @PostMapping("/batches/{batchId}/report")
+    public ApiResponse<SettlementBatchDto> report(@PathVariable Long batchId) {
+        return ApiResponse.ok(clearingService.retryExternal(batchId));
+    }
 }

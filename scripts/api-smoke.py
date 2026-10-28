@@ -111,6 +111,15 @@ def main():
 
     smoke.run("list commodities", commodities)
 
+    def integration_status():
+        data = client.get("/api/integration/status")
+        assert data["enabled"] is True, data
+        assert data["status"] == "UP", data
+        assert data["mockBankStatus"] == "UP", data
+        return f"adapter={data['status']} mockBank={data['mockBankStatus']}"
+
+    smoke.run("clearing adapter and mock bank are up", integration_status)
+
     def orderbook():
         commodity_id = state["commodity"]["id"]
         data = client.get(f"/api/market/{commodity_id}/orderbook?depth=5")
@@ -240,10 +249,20 @@ def main():
         assert batch["totalTrades"] >= 1, batch
         assert batch["details"], batch
         assert batch["reconciliations"], batch
+        assert batch.get("externalStatus") == "ACCEPTED", batch
+        assert batch.get("externalRef"), batch
         state["batch"] = batch
-        return f"{batch['batchNo']} trades={batch['totalTrades']} firms={batch['firmCount']}"
+        return f"{batch['batchNo']} trades={batch['totalTrades']} ref={batch['externalRef']}"
 
-    smoke.run("run clearing batch", run_clearing)
+    smoke.run("run clearing batch and report to adapter", run_clearing)
+
+    def retry_clearing_report():
+        batch = client.post(f"/api/clearing/batches/{state['batch']['id']}/report")
+        assert batch.get("externalStatus") == "ACCEPTED", batch
+        assert batch.get("externalRef") == state["batch"].get("externalRef"), batch
+        return f"idempotent ref={batch['externalRef']}"
+
+    smoke.run("retry clearing report is idempotent", retry_clearing_report)
 
     def bank_reconciles():
         accounts = client.get("/api/bank/accounts")
@@ -254,7 +273,10 @@ def main():
             "bank": account["balance"],
             "ledger": funds_data["balance"],
         }
-        return f"bank={account['balance']} ledger={funds_data['balance']}"
+        transactions = client.get(f"/api/bank/transactions?firmId={firm_id}&limit=20")
+        settle = next((item for item in transactions if item["type"] == "SETTLE"), None)
+        assert settle and str(settle.get("externalRef", "")).startswith("CH-"), settle
+        return f"bank={account['balance']} ledger={funds_data['balance']} ref={settle['externalRef']}"
 
     smoke.run("bank balance reconciles with ledger", bank_reconciles)
 
@@ -267,9 +289,20 @@ def main():
             "before": before["balance"],
             "after": after["balance"],
         }
-        return f"balance {before['balance']} -> {after['balance']}"
+        transactions = client.get(f"/api/bank/transactions?firmId={firm_id}&limit=10")
+        deposit = next(item for item in transactions if item["type"] == "DEPOSIT")
+        assert deposit.get("externalRef"), deposit
+        bank_account = next(item for item in client.get("/api/bank/accounts")
+                            if item["firmId"] == firm_id)
+        mock_account = next(item for item in client.get("/api/integration/accounts")
+                            if item["firmId"] == firm_id)
+        assert abs(float(bank_account["balance"]) - float(mock_account["balance"])) < 0.0001, {
+            "local": bank_account["balance"],
+            "mock": mock_account["balance"],
+        }
+        return f"balance {before['balance']} -> {after['balance']} ref={deposit['externalRef']}"
 
-    smoke.run("bank deposit updates ledger", bank_deposit)
+    smoke.run("bank deposit through adapter", bank_deposit)
 
     def bank_withdraw():
         before = client.get(f"/api/funds?firmId={firm_id}")
@@ -280,17 +313,36 @@ def main():
             "before": before["balance"],
             "after": after["balance"],
         }
-        return f"balance {before['balance']} -> {after['balance']}"
+        transactions = client.get(f"/api/bank/transactions?firmId={firm_id}&limit=10")
+        withdraw = next(item for item in transactions if item["type"] == "WITHDRAW")
+        assert withdraw.get("externalRef"), withdraw
+        bank_account = next(item for item in client.get("/api/bank/accounts")
+                            if item["firmId"] == firm_id)
+        mock_account = next(item for item in client.get("/api/integration/accounts")
+                            if item["firmId"] == firm_id)
+        assert abs(float(bank_account["balance"]) - float(mock_account["balance"])) < 0.0001, {
+            "local": bank_account["balance"],
+            "mock": mock_account["balance"],
+        }
+        return f"balance {before['balance']} -> {after['balance']} ref={withdraw['externalRef']}"
 
-    smoke.run("bank withdraw updates ledger", bank_withdraw)
+    smoke.run("bank withdraw through adapter", bank_withdraw)
 
     def reset():
         client.post("/api/demo/reset")
         status = client.get("/api/demo/status")
         assert status["status"] == "UP", status
-        return f"orders={status['orders']} trades={status['trades']}"
+        bank_account = next(item for item in client.get("/api/bank/accounts")
+                            if item["firmId"] == firm_id)
+        mock_account = next(item for item in client.get("/api/integration/accounts")
+                            if item["firmId"] == firm_id)
+        assert abs(float(bank_account["balance"]) - float(mock_account["balance"])) < 0.0001, {
+            "local": bank_account["balance"],
+            "mock": mock_account["balance"],
+        }
+        return f"orders={status['orders']} trades={status['trades']} bank={bank_account['balance']}"
 
-    smoke.run("reset demo data", reset)
+    smoke.run("reset demo data and mock bank", reset)
 
     return smoke.summary()
 

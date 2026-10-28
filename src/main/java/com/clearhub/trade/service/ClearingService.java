@@ -18,6 +18,10 @@ import com.clearhub.trade.dto.ClearingSummaryDto;
 import com.clearhub.trade.dto.ReconciliationDto;
 import com.clearhub.trade.dto.SettlementBatchDto;
 import com.clearhub.trade.dto.SettlementDetailDto;
+import com.clearhub.trade.integration.AdapterClient;
+import com.clearhub.trade.integration.AdapterSettleRequest;
+import com.clearhub.trade.integration.AdapterSettleResponse;
+import com.clearhub.trade.integration.IntegrationProperties;
 import com.clearhub.trade.repository.BankAccountRepository;
 import com.clearhub.trade.repository.CommodityRepository;
 import com.clearhub.trade.repository.FirmRepository;
@@ -65,6 +69,8 @@ public class ClearingService {
     private final ReconciliationRepository reconciliationRepository;
     private final BankAccountRepository bankAccountRepository;
     private final BankService bankService;
+    private final AdapterClient adapterClient;
+    private final IntegrationProperties integrationProperties;
 
     @Transactional
     public SettlementBatchDto run() {
@@ -118,11 +124,12 @@ public class ClearingService {
                 .map(SettlementDetail::getFirmId)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
         List<Reconciliation> reconciliations = new ArrayList<>();
+        String clearingRef = integrationProperties.isEnabled() ? "CH-" + batch.getBatchNo() : null;
         for (Long firmId : firmIds) {
             FundsAccount fundsAccount = fundsAccountRepository.findByFirmIdAndSymbolId(firmId, 1L)
                     .orElseThrow(() -> new BizException(ErrorCode.ACCOUNT_NOT_FOUND, "firmId=" + firmId));
             BankSettlementResult bankResult = bankService.settle(
-                    firmId, fundsAccount.getBalance(), batch.getBatchNo());
+                    firmId, fundsAccount.getBalance(), batch.getBatchNo(), clearingRef);
 
             Reconciliation reconciliation = new Reconciliation();
             reconciliation.setBatchId(batch.getId());
@@ -137,11 +144,6 @@ public class ClearingService {
         }
         reconciliationRepository.saveAll(reconciliations);
 
-        for (TradeRecord trade : trades) {
-            trade.setSettledBatchId(batch.getId());
-        }
-        tradeRecordRepository.saveAll(trades);
-
         batch.setTotalTrades(trades.size());
         batch.setTotalAmount(Money.money(trades.stream()
                 .map(TradeRecord::getAmount)
@@ -150,6 +152,14 @@ public class ClearingService {
                 .map(trade -> trade.getBuyFee().add(trade.getSellFee()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add)));
         batch.setFirmCount(firmIds.size());
+
+        applyExternalSettlement(batch, details, reconciliations);
+
+        for (TradeRecord trade : trades) {
+            trade.setSettledBatchId(batch.getId());
+        }
+        tradeRecordRepository.saveAll(trades);
+
         batch.setStatus("COMPLETED");
         batch.setEndTime(LocalDateTime.now());
         batchRepository.save(batch);
@@ -191,6 +201,59 @@ public class ClearingService {
         return dto;
     }
 
+    public SettlementBatchDto retryExternal(Long batchId) {
+        if (!integrationProperties.isEnabled()) {
+            throw new BizException(ErrorCode.CHANNEL_ERROR, "外部通道未启用");
+        }
+        SettlementBatch batch = batchRepository.findById(batchId)
+                .orElseThrow(() -> new BizException(ErrorCode.VALIDATION, "清算批次不存在"));
+        List<SettlementDetail> details = detailRepository
+                .findByBatchIdOrderByFirmIdAscCommodityIdAsc(batchId);
+        List<Reconciliation> reconciliations = reconciliationRepository
+                .findByBatchIdOrderByFirmIdAsc(batchId);
+        applyExternalSettlement(batch, details, reconciliations);
+        batchRepository.save(batch);
+        return toDto(batch, details, reconciliations);
+    }
+
+    private void applyExternalSettlement(SettlementBatch batch,
+                                         List<SettlementDetail> details,
+                                         List<Reconciliation> reconciliations) {
+        if (!integrationProperties.isEnabled()) {
+            batch.setExternalStatus("LOCAL");
+            return;
+        }
+        AdapterSettleRequest request = new AdapterSettleRequest();
+        request.setBatchNo(batch.getBatchNo());
+        request.setTradeDay(batch.getTradeDay());
+        request.setTotalTrades(batch.getTotalTrades());
+        request.setTotalAmount(batch.getTotalAmount());
+        request.setTotalFee(batch.getTotalFee());
+        for (Reconciliation reconciliation : reconciliations) {
+            BankAccount account = bankAccountRepository.findByFirmId(reconciliation.getFirmId()).orElse(null);
+            if (account == null) {
+                continue;
+            }
+            AdapterSettleRequest.Adjustment adjustment = new AdapterSettleRequest.Adjustment();
+            adjustment.setFirmId(reconciliation.getFirmId());
+            adjustment.setAccountNo(account.getAccountNo());
+            adjustment.setAmount(reconciliation.getSettledAmount());
+            request.getAdjustments().add(adjustment);
+        }
+        try {
+            AdapterSettleResponse response = adapterClient.settle(request);
+            batch.setExternalRef(response.getClearingRef());
+            batch.setExternalStatus(response.getStatus());
+            batch.setExternalMessage(response.getMessage());
+            batch.setExternalTime(response.getAcceptedAt() == null ? LocalDateTime.now() : response.getAcceptedAt());
+        } catch (Exception ex) {
+            batch.setExternalStatus("FAILED");
+            batch.setExternalMessage(ex.getMessage());
+            batch.setExternalTime(LocalDateTime.now());
+            log.warn("External clearing report failed for {}: {}", batch.getBatchNo(), ex.getMessage());
+        }
+    }
+
     private SettlementBatchDto toDto(SettlementBatch batch,
                                      List<SettlementDetail> details,
                                      List<Reconciliation> reconciliations) {
@@ -208,6 +271,10 @@ public class ClearingService {
         dto.setTotalAmount(batch.getTotalAmount());
         dto.setTotalFee(batch.getTotalFee());
         dto.setFirmCount(batch.getFirmCount());
+        dto.setExternalRef(batch.getExternalRef());
+        dto.setExternalStatus(batch.getExternalStatus());
+        dto.setExternalMessage(batch.getExternalMessage());
+        dto.setExternalTime(batch.getExternalTime());
         dto.setStartTime(batch.getStartTime());
         dto.setEndTime(batch.getEndTime());
         dto.setCreateTime(batch.getCreateTime());
