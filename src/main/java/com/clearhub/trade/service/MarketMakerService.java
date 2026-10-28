@@ -7,6 +7,7 @@ import com.clearhub.trade.domain.Commodity;
 import com.clearhub.trade.domain.TradeOrder;
 import com.clearhub.trade.dto.PlaceOrderRequest;
 import com.clearhub.trade.repository.CommodityRepository;
+import com.clearhub.trade.repository.TradeOrderRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -28,12 +29,14 @@ public class MarketMakerService {
 
     private final DemoProperties properties;
     private final CommodityRepository commodityRepository;
+    private final TradeOrderRepository orderRepository;
     private final QuotationService quotationService;
     private final OrderService orderService;
     private final MatcherService matcherService;
 
     private final Map<Long, List<Long>> liveOrders = new ConcurrentHashMap<>();
     private final Map<Long, BigDecimal> lastReference = new ConcurrentHashMap<>();
+    private volatile boolean initialized = false;
 
     @PostConstruct
     public void init() {
@@ -49,6 +52,10 @@ public class MarketMakerService {
         DemoProperties.MarketMaker config = properties.getMarketMaker();
         if (config == null || !config.isEnabled() || config.getFirmId() == null) {
             return;
+        }
+        if (!initialized) {
+            cancelStaleQuotes(config.getFirmId());
+            initialized = true;
         }
         List<Commodity> commodities = commodityRepository.findByStatusOrderByIdAsc(1);
         for (Commodity commodity : commodities) {
@@ -141,8 +148,23 @@ public class MarketMakerService {
         }
     }
 
+    private void cancelStaleQuotes(Long firmId) {
+        List<TradeOrder> openOrders = orderRepository.findByOrderStatusInOrderByIdAsc(List.of(0, 1));
+        for (TradeOrder order : openOrders) {
+            if (!firmId.equals(order.getFirmId())) {
+                continue;
+            }
+            try {
+                orderService.cancelOrder(null, order.getId());
+            } catch (Exception ignored) {
+                // filled, already cancelled, or removed by reset
+            }
+        }
+    }
+
     public void clearQuotes() {
         liveOrders.clear();
         lastReference.clear();
+        initialized = false;
     }
 }
