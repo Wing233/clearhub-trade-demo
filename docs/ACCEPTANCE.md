@@ -1,6 +1,6 @@
 # 验收清单
 
-日期：2026-10-28  
+日期：2026-10-29  
 验收对象：`trade-demo`（ClearHub 交易核心演示）
 
 ## 1. 构建与测试
@@ -30,7 +30,7 @@
 
 | # | 检查项 | 结果 |
 |---|---|---|
-| 14 | 账户列表（3 个） | PASS |
+| 14 | 账户列表（4 个） | PASS |
 | 15 | 商品列表（2 个） | PASS |
 | 16 | 盘口双边 3 档 | PASS |
 | 17 | 买入撮合成交 | PASS |
@@ -50,8 +50,8 @@
 
 | # | 检查项 | 结果 |
 |---|---|---|
-| 29 | 未清算成交汇总 | PASS（1 笔 / 100.04） |
-| 30 | 执行日终清算生成批次 | PASS（1 批次 / 1 笔 / 2 账户） |
+| 29 | 未清算成交汇总 | PASS（演示中 21 笔 / 46,299.20，随模拟成交变化） |
+| 30 | 执行日终清算生成批次 | PASS（1 批次 / 23 笔，明细+对账 8 行） |
 | 31 | 按账户/商品生成清算明细 | PASS（期初、买入、卖出、期末、手续费、净额） |
 | 32 | 银行结算账户对账 | PASS（SETTLED，结算后银行余额 = 内部余额） |
 | 33 | 清算所适配器上报 | PASS（`CH-<batchNo>`，`ACCEPTED`） |
@@ -68,14 +68,15 @@
 |---|---|---|
 | 40 | 顶部账户/资金指标 | PASS |
 | 41 | 左侧市场列表与涨跌 | PASS |
-| 42 | 中间盘口/最近成交/价格走势 | PASS |
-| 43 | 右侧下单面板（价格/数量/快捷比例） | PASS |
-| 44 | 我的委托/成交/持仓/资金/流水 5 个页签 | PASS |
-| 45 | 「交易终端 / 清算与银行」视图切换 | PASS |
-| 46 | 清算页：通道状态、批次、明细、对账、执行按钮 | PASS |
-| 47 | 批次回执 `ACCEPTED`、`CH-...` 与「重新上报」 | PASS |
-| 48 | 银行页：账户、入金/出金弹窗、外部流水号、流水 | PASS |
-| 49 | Console error / pageerror | 0 |
+| 42 | 中间盘口/最近成交/1 分钟 K 线 + 成交量 + MA/市场深度 | PASS |
+| 43 | 左侧撮合引擎状态卡、LIVE 徽标、市场脉搏 | PASS |
+| 44 | 右侧下单面板（价格/数量/快捷比例）与市场信息 | PASS |
+| 45 | 我的委托/成交/持仓/资金/流水 5 个页签 | PASS |
+| 46 | 「交易终端 / 清算与银行」视图切换 | PASS |
+| 47 | 清算页：通道状态、批次、明细、对账、执行按钮 | PASS |
+| 48 | 批次回执 `ACCEPTED`、`CH-...` 与「重新上报」 | PASS |
+| 49 | 银行页：账户、入金/出金弹窗、外部流水号、流水 | PASS |
+| 50 | Console error / pageerror | 0 |
 
 截图：`docs/screenshots/01-overview.png` ~ `08-bank.png`
 
@@ -83,14 +84,14 @@
 
 | # | 交付物 | 路径 |
 |---|---|---|
-| 50 | 源码 | `src/main/java`、`src/test/java` |
-| 51 | 前端 | `web/`（含预构建 `web/dist`） |
-| 52 | 建表脚本 | `db/init/01-schema.sql`（22 张表） |
-| 53 | 升级脚本 | `db/migration/02-clearing.sql`、`db/migration/03-adapter.sql` |
-| 54 | 容器编排 | `Dockerfile`、`services/*/Dockerfile`、`docker-compose.yml`、`web/nginx.conf` |
-| 55 | 环境模板 | `.env.example` |
-| 56 | 冒烟脚本 | `scripts/api-smoke.py`、`scripts/ui-smoke.py`、`scripts/smoke.sh` |
-| 57 | 文档 | `README.md`、`docs/*.md`、`SECURITY.md`、`legacy/README.md` |
+| 51 | 源码 | `src/main/java`、`src/test/java` |
+| 52 | 前端 | `web/`（含预构建 `web/dist`） |
+| 53 | 建表脚本 | `db/init/01-schema.sql`（22 张表） |
+| 54 | 升级脚本 | `db/migration/02-clearing.sql`、`db/migration/03-adapter.sql`、`db/migration/04-market.sql` |
+| 55 | 容器编排 | `Dockerfile`、`services/*/Dockerfile`、`docker-compose.yml`、`web/nginx.conf` |
+| 56 | 环境模板 | `.env.example` |
+| 57 | 冒烟脚本 | `scripts/api-smoke.py`、`scripts/ui-smoke.py`、`scripts/smoke.sh` |
+| 58 | 文档 | `README.md`、`docs/*.md`、`SECURITY.md`、`legacy/README.md` |
 
 ## 7. 服务器上线前需人工确认
 
@@ -108,6 +109,6 @@
 - 后端撮合、资金、持仓、下单/撤单/成交链路通过自动化测试与 MySQL 实例验证。
 - 清算批次、明细归集、银行结算、对账、入金/出金通过自动化测试与页面验证。
 - 清算所适配器、模拟银行通过 API 冒烟与页面验证：回执 `CH-...`、幂等重报、`MB...` 外部流水号、重置同步。
-- 前端交易终端与清算/银行页面可完成完整演示，生产构建与 Nginx 代理正常。
-- Docker Compose（MySQL 8 + 三个 Java 服务 + Nginx）在本机完整启动，API 冒烟 19/19，页面 0 报错。
+- 前端交易终端（实时行情、1 分钟 K 线、市场深度、撮合引擎状态）与清算/银行页面可完成完整演示，生产构建与 Nginx 代理正常。
+- Docker Compose（MySQL 8 + 三个 Java 服务 + Nginx）在本机完整启动，API 冒烟 19/19，页面 0 报错，后端测试 14/14。
 - 具备在 Linux + Docker 服务器上部署的条件；按 `docs/DEPLOY.md` 执行即可。

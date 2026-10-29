@@ -1,6 +1,6 @@
 # 测试报告
 
-日期：2026-10-28  
+日期：2026-10-29  
 项目：ClearHub 交易核心演示（`trade-demo`）
 
 ## 1. 环境
@@ -20,7 +20,7 @@
 ## 2. 自动化测试（mvn test）
 
 命令：`mvn -B test`  
-结果：**14 / 14 通过，0 失败，0 错误**
+结果：**14 / 14 通过，0 失败，0 错误**（`Demo data seeded: 4 firms, 2 commodities`）
 
 ### 2.1 撮合引擎单测（6 个）
 
@@ -65,16 +65,18 @@
 
 | 检查 | 结果 |
 |---|---|
-| 页面标题与品牌 | ClearHub / 交易核心演示 |
+| 页面标题与品牌 | ClearHub / 交易核心演示 / LIVE |
 | 市场列表 | 2 个商品 |
-| 盘口 | 买一/卖一均存在 |
+| 盘口 | 买一/卖一均存在，3 档买卖 |
 | 账户指标 | 可用资金、冻结、余额渲染 |
-| 下单 | 买入 2 手，生成成交 |
+| K 线与深度 | 1 分钟 K 线 + 成交量 + MA，市场深度图正常 |
+| 撮合引擎卡 | 累计委托/成交、未完成委托、规则标签渲染 |
+| 下单 | 按卖一价 + 1 tick 买入 2 手，生成成交 |
 | 我的成交 | 1 行 |
 | 持仓 | 2 行（两个商品） |
 | 资金流水 | 2 行（冻结 + 成交扣款） |
-| 清算页 | 未清算 1 笔、执行清算、批次/明细/对账 4 行 |
-| 银行页 | 3 个银行账户、入金 500、银行流水 3 行 |
+| 清算页 | 未清算 21 笔 / 46,299.20，执行清算，批次 23 笔、明细/对账 8 行 |
+| 银行页 | 4 个银行账户、入金 500、银行流水 4 行 |
 | 截图 | `docs/screenshots/01~08` |
 
 ## 4. 手工 API 验证
@@ -120,35 +122,38 @@ API 冒烟（经 Nginx → trade-core → MySQL）：
 
 ```
 PASS  actuator health  UP
-PASS  list accounts  3 accounts
-PASS  list commodities  DEMO-A last=100.26
+PASS  list accounts  4 accounts
+PASS  list commodities  DEMO-A last=100.57
 PASS  clearing adapter and mock bank are up  adapter=UP mockBank=UP
-PASS  order book has two sides  bids=3 asks=3
-PASS  place crossing buy  order #1337 101.08
-PASS  trade is produced  2 trades
-PASS  position updated  quantity=100003.0
-PASS  place resting buy and freeze funds  order #1345 frozen=95.3
+PASS  order book has two sides  bids=3 asks=4
+PASS  place crossing buy  order #242 101.42
+PASS  trade is produced  1 trades
+PASS  position updated  quantity=100001.0
+PASS  place resting buy and freeze funds  order #243 frozen=95.59
 PASS  cancel releases frozen funds  cancelled, frozen=0
 PASS  price limit rejected  rejected with 40007
 PASS  insufficient funds rejected  rejected with 40003
-PASS  clearing summary has unsettled trades  unsettled=1 amount=100.08
-PASS  run clearing batch and report to adapter  CL20261028192216808090 trades=1 ref=CH-CL20261028192216808090
-PASS  retry clearing report is idempotent  idempotent ref=CH-CL20261028192216808090
-PASS  bank balance reconciles with ledger  bank=9999699.25 ledger=9999699.25 ref=CH-CL20261028192216808090
-PASS  bank deposit through adapter  balance 9999699.25 -> 10000699.25 ref=MB20261028192217558130
-PASS  bank withdraw through adapter  balance 10000699.25 -> 10000299.25 ref=MB20261028192217755823
+PASS  clearing summary has unsettled trades  unsettled=31 amount=78512.77
+PASS  run clearing batch and report to adapter  CL20261029174257744747 trades=31 ref=CH-CL20261029174257744747
+PASS  retry clearing report is idempotent  idempotent ref=CH-CL20261029174257744747
+PASS  bank balance reconciles with ledger  bank=9999899.53 ledger=9999899.53 ref=CH-CL20261029174257744747
+PASS  bank deposit through adapter  balance 9999899.53 -> 10000899.53 ref=MB20261029174258539968
+PASS  bank withdraw through adapter  balance 10000899.53 -> 10000499.53 ref=MB20261029174258770740
 PASS  reset demo data and mock bank  orders=0 trades=0 bank=10000000.0
 
 19/19 checks passed
 ```
 
+> 数字随模拟交易员持续成交而变化，以上为一次实际运行的输出。
+
 页面冒烟（生产 Nginx 静态产物 `http://127.0.0.1:8088`）：
 
 - 盘口 3 档买 / 3 档卖；
+- 1 分钟 K 线、成交量、MA5/MA10 与市场深度图正常渲染，含「含模拟历史」标记；
 - 下单 2 手后成交 1 条；
 - 持仓 2 条、资金流水 2 条；
-- 清算页：通道状态「清算所适配器 UP / 模拟银行 UP」、未清算 1 笔、批次 1 条、明细/对账 4 行、回执 `ACCEPTED`；
-- 银行页：3 个账户、入金 500、银行流水 3 条、清算结算流水带 `CH-...` 外部流水号；
+- 清算页：通道状态「清算所适配器 UP / 模拟银行 UP」、未清算 21 笔、批次 1 条 / 23 笔、明细/对账 8 行、回执 `ACCEPTED`；
+- 银行页：4 个账户、入金 500、银行流水 4 条、清算结算流水带 `CH-...` 外部流水号；
 - `console error` / `pageerror` 均为 0；
 - 截图见 `docs/screenshots/01~08`。
 
@@ -161,6 +166,7 @@ PASS  reset demo data and mock bank  orders=0 trades=0 bank=10000000.0
 | 前端 bundle 2.16 MB（gzip 715 KB） | 首屏略慢 | 演示可接受；后续可按需引入 Element Plus / ECharts 或拆 vendor |
 | H2 关闭时 `Database is already closed` | 仅测试退出日志 | 已在 H2 URL 加 `DB_CLOSE_ON_EXIT=FALSE` |
 | 模拟做市商每 3 秒撤挂 | 委托/流水增长较快 | 演示可接受；长时间运行可加历史清理任务 |
+| 模拟交易员每 2.5 秒成交 | 成交/资金流水持续增长 | 演示可接受；设置 `DEMO_FLOW_ENABLED=false` 可关闭 |
 | 适配器/模拟银行为内存+MySQL 实现 | 非真实机构 | 演示用途；真实接入需替换为银行/清算所协议 |
 | 无鉴权 | 任何人可下单/重置/出入金 | 演示环境；公网部署前按 SECURITY.md 加固 |
 
@@ -169,6 +175,6 @@ PASS  reset demo data and mock bank  orders=0 trades=0 bank=10000000.0
 - 撮合规则、冻结/扣款/解冻、持仓更新、涨跌停与资金校验均通过自动化测试。
 - 清算批次、按账户/商品归集、银行结算与对账、出入金通过自动化测试。
 - 清算所适配器与模拟银行链路通过 API 冒烟：回执 `CH-...`、幂等重报、入金/出金 `MB...` 外部流水号、重置同步。
-- 交易终端与清算/银行页面可完成完整演示，生产构建与 Nginx 代理正常。
+- 交易终端（1 分钟 K 线、市场深度、撮合引擎状态、LIVE/市场脉搏）与清算/银行页面可完成完整演示，生产构建与 Nginx 代理正常。
 - Docker Compose（MySQL 8 + 三个 Java 服务 + Nginx）已在本机完整启动，API 19/19、页面 0 报错。
 - 代码可构建、可测试、可容器化；服务器侧只需复制 `.env.example` 为 `.env`、修改密码、执行 `docker compose up -d --build`。

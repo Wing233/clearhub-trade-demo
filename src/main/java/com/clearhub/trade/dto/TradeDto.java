@@ -21,5 +21,6 @@ public class TradeDto {
     private Long sellFirmId;
     private String side;
     private String sideLabel;
+    private String takerSide;
     private LocalDateTime createTime;
 }

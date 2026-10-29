@@ -11,6 +11,9 @@ const emit = defineEmits(['pick'])
 
 const asks = computed(() => [...(props.book?.asks || [])].slice(0, 10).reverse())
 const bids = computed(() => [...(props.book?.bids || [])].slice(0, 10))
+const bestAsk = computed(() => num(props.book?.asks?.[0]?.price))
+const bestBid = computed(() => num(props.book?.bids?.[0]?.price))
+const spread = computed(() => (bestAsk.value && bestBid.value ? bestAsk.value - bestBid.value : 0))
 const maxQty = computed(() => {
   const all = [...(props.book?.asks || []), ...(props.book?.bids || [])]
   return Math.max(1, ...all.map((level) => num(level.quantity)))
@@ -44,6 +47,11 @@ const pick = (level) => emit('pick', level.price)
     <div class="mid-price">
       <span>最新价</span>
       <strong>{{ fmt(lastPrice) }}</strong>
+    </div>
+    <div class="book-meta">
+      <span>买一 <b class="up">{{ fmt(bestBid) }}</b></span>
+      <span>卖一 <b class="down">{{ fmt(bestAsk) }}</b></span>
+      <span>价差 <b>{{ fmt(spread) }}</b></span>
     </div>
     <div
       v-for="level in bids"

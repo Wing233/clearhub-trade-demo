@@ -9,6 +9,7 @@ public record Match(
         long sellFirmId,
         long commodityId,
         BigDecimal price,
-        BigDecimal quantity
+        BigDecimal quantity,
+        String takerSide
 ) {
 }

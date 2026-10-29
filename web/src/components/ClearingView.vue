@@ -221,7 +221,7 @@ onMounted(loadAll)
       <div class="clear-card">
         <label>银行结算账户合计</label>
         <strong>{{ fmt(summary.bankTotal) }}</strong>
-        <span>内部资金合计 {{ fmt(summary.ledgerTotal) }}</span>
+        <span>内部资金合计 {{ fmt(summary.ledgerTotal) }}（未清算手续费会造成差异）</span>
       </div>
     </div>
 

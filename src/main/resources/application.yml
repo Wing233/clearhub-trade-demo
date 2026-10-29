@@ -68,6 +68,12 @@ demo:
     min-quantity: 10
     max-quantity: 60
     max-price-drift: 0.004
+  flow-trader:
+    enabled: ${DEMO_FLOW_ENABLED:true}
+    firm-id: 4
+    interval-ms: 2500
+    min-quantity: 5
+    max-quantity: 30
   accounts:
     - id: 1
       code: MM001
@@ -84,6 +90,11 @@ demo:
       name: 演示用户 B
       cash: 10000000.00
       position: 100000
+    - id: 4
+      code: FLOW001
+      name: 模拟交易员
+      cash: 1000000000.00
+      position: 5000000
 
 logging:
   level:

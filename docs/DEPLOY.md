@@ -68,6 +68,7 @@ python3 scripts/api-smoke.py --base-url http://127.0.0.1:8088
 | `DEMO_SEED` | true | 首次启动是否写入演示数据 |
 | `DEMO_RESET_ENABLED` | true | 是否允许 `/api/demo/reset` |
 | `DEMO_MM_ENABLED` | true | 是否启动模拟做市商 |
+| `DEMO_FLOW_ENABLED` | true | 是否启动模拟交易员（持续成交） |
 | `INTEGRATION_ENABLED` | true | 是否启用清算所适配器/模拟银行 |
 | `ADAPTER_TIMEOUT_MS` | 5000 | 适配器 HTTP 超时 |
 | `JAVA_OPTS` | -Xms256m -Xmx512m | trade-core JVM 参数 |
@@ -82,13 +83,16 @@ python3 scripts/api-smoke.py --base-url http://127.0.0.1:8088
 
 - v1.1 增加了清算/银行 5 张表与 `sec_trade.settled_batch_id`，对应 `db/migration/02-clearing.sql`。
 - v1.2 增加了适配器/模拟银行相关字段与 2 张模拟银行表，对应 `db/migration/03-adapter.sql`。
+- v1.3 为 `sec_trade` 增加 `taker_side`（成交方向），对应 `db/migration/04-market.sql`。
 - 全新部署：`db/init/01-schema.sql` 已包含全部 22 张表，无需额外操作。
-- 从 v1.0 升级：按顺序执行 `02-clearing.sql`、`03-adapter.sql`。
+- 从 v1.0 升级：按顺序执行 `02-clearing.sql`、`03-adapter.sql`、`04-market.sql`。
   ```bash
   docker compose exec -T mysql sh -c \
     'exec mysql -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' < db/migration/02-clearing.sql
   docker compose exec -T mysql sh -c \
     'exec mysql -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' < db/migration/03-adapter.sql
+  docker compose exec -T mysql sh -c \
+    'exec mysql -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' < db/migration/04-market.sql
   docker compose up -d --build
   ```
   或者演示环境直接 `docker compose down -v && docker compose up -d --build`（会清空数据）。

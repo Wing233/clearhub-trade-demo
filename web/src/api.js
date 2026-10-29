@@ -26,6 +26,8 @@ export const api = {
     http.get(`/api/market/${commodityId}/orderbook`, { params: { depth } }),
   marketTrades: (commodityId, limit = 50) =>
     http.get(`/api/market/${commodityId}/trades`, { params: { limit } }),
+  candles: (commodityId, limit = 60) =>
+    http.get(`/api/market/${commodityId}/candles`, { params: { limit } }),
   funds: (firmId) => http.get('/api/funds', { params: { firmId } }),
   positions: (firmId) => http.get('/api/positions', { params: { firmId } }),
   orders: (firmId) => http.get('/api/orders', { params: { firmId } }),

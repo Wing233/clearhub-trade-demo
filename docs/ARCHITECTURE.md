@@ -9,7 +9,9 @@ flowchart LR
   N -->|/api /ws| A[trade-core :8080]
   A --> DB[(MySQL 8)]
   A --> M[模拟做市商]
+  A --> F[模拟交易员]
   M -->|下单/撤单| A
+  F -->|穿越盘口下单| A
   A -->|入金/出金/清算上报| AD[clearing-adapter :8090]
   AD -->|JSON/HTTP| MB[mock-bank :8091]
   MB --> DB
@@ -29,7 +31,7 @@ flowchart LR
 | 包 | 职责 |
 |---|---|
 | `engine` | 纯 Java 撮合引擎：`MatchEngine`、`MatcherWorker`、`BookOrder`、`Match`、`BookSnapshot` |
-| `service` | `OrderService`（下单/撤单）、`SettlementService`（成交结算）、`MarginLedger`（资金）、`PositionService`（持仓）、`QuotationService`（行情）、`MatcherService`（撮合线程管理）、`MarketMakerService`（做市）、`ClearingService`（清算）、`BankService`（银行）、`DemoDataService`（种子/重置） |
+| `service` | `OrderService`（下单/撤单）、`SettlementService`（成交结算）、`MarginLedger`（资金）、`PositionService`（持仓）、`QuotationService` / `MarketDataService`（行情、K 线聚合）、`MatcherService`（撮合线程管理）、`MarketMakerService`（做市）、`FlowTraderService`（模拟交易员）、`ClearingService`（清算）、`BankService`（银行）、`DemoDataService`（种子/重置） |
 | `integration` | `AdapterClient` 与适配器 DTO；`AdapterClient` 负责超时、失败消息、状态查询 |
 | `domain` | 22 张表的 JPA 实体 |
 | `repository` | Spring Data JPA，关键查询使用悲观锁 |
@@ -145,13 +147,28 @@ sequenceDiagram
 - 查询：`MarketDataService` 只读，不加锁；盘口从撮合引擎内存快照读取。
 - `TradeOrder`/`FundsAccount` 带 `@Version`，作为额外保护。
 
-## 7. 模拟做市商
+## 7. 模拟做市商与模拟交易员
 
 - 每 3 秒运行一次，按商品读取最新价，随机游走 ±0.4%。
 - 以参考价为中心，按 `spreadTicks × 档位` 生成 3 档买卖报价，每档随机数量。
 - 价格未变化时跳过，避免无意义刷单。
 - 使用独立账户（默认 `firm_id=1`），与演示用户隔离；禁止自成交，因此不会自己和自己成交。
 - 可通过 `DEMO_MM_ENABLED=false` 关闭。
+
+### 7.1 模拟交易员
+
+- 每 2.5 秒随机选择一个商品，以「买一 + 1 tick」或「卖一 − 1 tick」提交限价单，主动穿越盘口；
+- 订单经过真实撮合、结算、资金/持仓更新，因此 K 线、成交带、盘口和清算数据都来自实际成交；
+- 使用独立账户 `firm_id=4`（`FLOW001`，初始资金 10 亿、持仓 500 万），不影响演示用户；
+- 成交写入 `taker_side`，前端据此显示买/卖方向；
+- 可通过 `DEMO_FLOW_ENABLED=false` 关闭。
+
+### 7.2 行情展示
+
+- K 线由 `sec_trade` 按分钟聚合出 OHLCV，接口为 `GET /api/market/{id}/candles`；
+- 前端不足 36 根时，用固定种子生成模拟历史并标注「含模拟历史」，保证首次打开就有完整形态；
+- 市场深度图由盘口快照的累计数量生成，不额外落表；
+- 页面的 LIVE 徽标、市场脉搏、买卖方向、价差均为纯展示层，不改变撮合规则。
 
 ## 8. 清算、适配器与模拟银行
 

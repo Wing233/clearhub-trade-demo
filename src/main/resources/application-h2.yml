@@ -19,6 +19,8 @@ demo:
   reset-enabled: true
   market-maker:
     enabled: true
+  flow-trader:
+    enabled: true
 
 integration:
   enabled: false

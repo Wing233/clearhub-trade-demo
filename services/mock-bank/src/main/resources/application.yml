@@ -46,6 +46,9 @@ mock:
       - account-no: BANK-DEMO002
         firm-id: 3
         balance: 10000000.00
+      - account-no: BANK-FLOW001
+        firm-id: 4
+        balance: 1000000000.00
 
 logging:
   level:

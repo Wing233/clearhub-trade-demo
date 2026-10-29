@@ -22,6 +22,7 @@ import com.clearhub.trade.dto.OrderBookDto;
 import com.clearhub.trade.dto.OrderDto;
 import com.clearhub.trade.dto.PositionDto;
 import com.clearhub.trade.dto.TradeDto;
+import com.clearhub.trade.dto.CandleDto;
 import com.clearhub.trade.engine.BookSnapshot;
 import com.clearhub.trade.repository.CommodityRepository;
 import com.clearhub.trade.repository.CommodityStatusRepository;
@@ -39,6 +40,10 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -125,6 +130,52 @@ public class MarketDataService {
                 .toList();
     }
 
+    public List<CandleDto> candles(Long commodityId, int limit) {
+        int size = Math.max(1, Math.min(limit, 120));
+        List<TradeRecord> trades = new ArrayList<>(tradeRecordRepository
+                .findByCommodityIdOrderByIdDesc(commodityId, PageRequest.of(0, 2000)));
+        Collections.reverse(trades);
+        Map<LocalDateTime, CandleAcc> buckets = new LinkedHashMap<>();
+        for (TradeRecord trade : trades) {
+            LocalDateTime time = (trade.getCreateTime() == null ? LocalDateTime.now() : trade.getCreateTime())
+                    .withSecond(0).withNano(0);
+            CandleAcc acc = buckets.computeIfAbsent(time, key -> new CandleAcc(trade.getPrice()));
+            acc.high = acc.high.max(trade.getPrice());
+            acc.low = acc.low.min(trade.getPrice());
+            acc.close = trade.getPrice();
+            acc.volume = acc.volume.add(trade.getQuantity());
+        }
+        List<CandleDto> candles = new ArrayList<>();
+        for (Map.Entry<LocalDateTime, CandleAcc> entry : buckets.entrySet()) {
+            CandleDto candle = new CandleDto();
+            candle.setTime(entry.getKey().format(DateTimeFormatter.ofPattern("HH:mm")));
+            candle.setOpen(Money.price(entry.getValue().open));
+            candle.setHigh(Money.price(entry.getValue().high));
+            candle.setLow(Money.price(entry.getValue().low));
+            candle.setClose(Money.price(entry.getValue().close));
+            candle.setVolume(Money.qty(entry.getValue().volume));
+            candles.add(candle);
+        }
+        return candles.size() > size
+                ? new ArrayList<>(candles.subList(candles.size() - size, candles.size()))
+                : candles;
+    }
+
+    private static final class CandleAcc {
+        private BigDecimal open;
+        private BigDecimal high;
+        private BigDecimal low;
+        private BigDecimal close;
+        private BigDecimal volume = BigDecimal.ZERO;
+
+        private CandleAcc(BigDecimal price) {
+            this.open = price;
+            this.high = price;
+            this.low = price;
+            this.close = price;
+        }
+    }
+
     public List<TradeDto> firmTrades(Long firmId, int limit) {
         Map<Long, Commodity> commodities = commodityMap();
         return tradeRecordRepository.findFirmTrades(firmId,
@@ -186,6 +237,7 @@ public class MarketDataService {
         dto.setSellFee(trade.getSellFee());
         dto.setBuyFirmId(trade.getBuyFirmId());
         dto.setSellFirmId(trade.getSellFirmId());
+        dto.setTakerSide(trade.getTakerSide());
         if (firmId != null) {
             if (firmId.equals(trade.getBuyFirmId())) {
                 dto.setSide("B");
@@ -194,6 +246,9 @@ public class MarketDataService {
                 dto.setSide("S");
                 dto.setSideLabel("卖出");
             }
+        } else {
+            dto.setSide(trade.getTakerSide());
+            dto.setSideLabel("B".equals(trade.getTakerSide()) ? "买入" : "卖出");
         }
         dto.setCreateTime(trade.getCreateTime());
         return dto;

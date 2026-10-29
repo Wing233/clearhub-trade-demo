@@ -6,6 +6,7 @@ import com.clearhub.trade.dto.CommodityDto;
 import com.clearhub.trade.dto.FirmDto;
 import com.clearhub.trade.dto.OrderBookDto;
 import com.clearhub.trade.dto.TradeDto;
+import com.clearhub.trade.dto.CandleDto;
 import com.clearhub.trade.service.MarketDataService;
 import com.clearhub.trade.service.QuotationService;
 import lombok.RequiredArgsConstructor;
@@ -45,6 +46,12 @@ public class MarketController {
     public ApiResponse<List<TradeDto>> trades(@PathVariable Long commodityId,
                                               @RequestParam(defaultValue = "50") int limit) {
         return ApiResponse.ok(marketDataService.recentTrades(commodityId, limit));
+    }
+
+    @GetMapping("/market/{commodityId}/candles")
+    public ApiResponse<List<CandleDto>> candles(@PathVariable Long commodityId,
+                                                @RequestParam(defaultValue = "60") int limit) {
+        return ApiResponse.ok(marketDataService.candles(commodityId, limit));
     }
 
     @GetMapping("/market/{commodityId}/quotation")

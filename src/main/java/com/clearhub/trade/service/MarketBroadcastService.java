@@ -40,6 +40,7 @@ public class MarketBroadcastService {
         message.put("amount", trade.amount());
         message.put("buyFirmId", trade.buyFirmId());
         message.put("sellFirmId", trade.sellFirmId());
+        message.put("side", trade.takerSide());
         message.put("time", trade.createTime() == null ? "" : trade.createTime().format(TIME_FORMAT));
         webSocketHandler.broadcast(trade.commodityId(), message);
     }

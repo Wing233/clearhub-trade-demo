@@ -12,6 +12,7 @@ public record SettlementResult(
         BigDecimal amount,
         Long buyFirmId,
         Long sellFirmId,
+        String takerSide,
         LocalDateTime createTime
 ) {
 }

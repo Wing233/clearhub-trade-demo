@@ -24,7 +24,8 @@ Base URL：`http://<host>:8088`（Nginx）或 `http://<host>:8080`（后端直�
   "data": [
     { "id": 1, "code": "MM001", "name": "做市商账户" },
     { "id": 2, "code": "DEMO001", "name": "演示用户" },
-    { "id": 3, "code": "DEMO002", "name": "演示用户 B" }
+    { "id": 3, "code": "DEMO002", "name": "演示用户 B" },
+    { "id": 4, "code": "FLOW001", "name": "模拟交易员" }
   ]
 }
 ```
@@ -78,7 +79,21 @@ Base URL：`http://<host>:8088`（Nginx）或 `http://<host>:8080`（后端直�
 
 ### GET /api/market/{commodityId}/trades?limit=50
 
-最近成交，按成交号倒序。
+最近成交，按成交号倒序；每笔带 `takerSide`（`B`/`S`）表示主动买/卖方向。
+
+### GET /api/market/{commodityId}/candles?limit=60
+
+1 分钟 K 线，按时间正序返回，最多 120 根：
+
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": [
+    { "time": "17:42", "open": 99.83, "high": 99.83, "low": 99.82, "close": 99.82, "volume": 30 }
+  ]
+}
+```
 
 ### GET /api/market/{commodityId}/quotation
 

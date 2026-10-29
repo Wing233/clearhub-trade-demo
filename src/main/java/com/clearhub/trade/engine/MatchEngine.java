@@ -75,7 +75,8 @@ public class MatchEngine {
                     incoming.isBuy() ? resting.getFirmId() : incoming.getFirmId(),
                     commodityId,
                     resting.getPrice(),
-                    quantity
+                    quantity,
+                    incoming.isBuy() ? "B" : "S"
             ));
             remaining = remaining.subtract(quantity);
             resting.setRemaining(resting.getRemaining().subtract(quantity));

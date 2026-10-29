@@ -70,6 +70,7 @@ public class SettlementService {
         trade.setBuyFee(buyFee);
         trade.setSellFee(sellFee);
         trade.setTradeDay(buy.getTradeDay());
+        trade.setTakerSide(match.takerSide());
         tradeRepository.save(trade);
 
         BigDecimal newBuyFilled = buy.getFilledQuantity().add(quantity);
@@ -114,6 +115,7 @@ public class SettlementService {
                 amount,
                 trade.getBuyFirmId(),
                 trade.getSellFirmId(),
+                trade.getTakerSide(),
                 trade.getCreateTime()
         );
     }

@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from './api'
-import { changeClass, fmt, num } from './utils'
+import { changeClass, fmt, fmtQty, num } from './utils'
 import MarketList from './components/MarketList.vue'
 import PriceChart from './components/PriceChart.vue'
 import OrderBook from './components/OrderBook.vue'
@@ -14,6 +14,7 @@ import PositionsTable from './components/PositionsTable.vue'
 import FundsPanel from './components/FundsPanel.vue'
 import FlowsTable from './components/FlowsTable.vue'
 import ClearingView from './components/ClearingView.vue'
+import MarketInfo from './components/MarketInfo.vue'
 
 const firms = ref([])
 const firmId = ref(Number(localStorage.getItem('clearhub.firmId') || 2))
@@ -22,6 +23,8 @@ const commodities = ref([])
 const currentId = ref(null)
 const book = ref({ bids: [], asks: [] })
 const marketTrades = ref([])
+const candles = ref([])
+const engine = ref(null)
 const orders = ref([])
 const myTrades = ref([])
 const positions = ref([])
@@ -31,12 +34,14 @@ const tab = ref('orders')
 const resetting = ref(false)
 const wsConnected = ref(false)
 const orderFormRef = ref(null)
+const now = ref(new Date())
 
 let socket = null
 let reconnectTimer = null
 let marketTimer = null
 let accountTimer = null
 let accountRefreshTimer = null
+let clockTimer = null
 let destroyed = false
 
 const currentCommodity = computed(
@@ -58,6 +63,21 @@ const bestBid = computed(
 const bestAsk = computed(
   () => book.value?.asks?.[0]?.price ?? currentCommodity.value?.bestAsk ?? null,
 )
+const totalVolume = computed(() =>
+  commodities.value.reduce((sum, item) => sum + num(item.volume), 0),
+)
+const totalAmount = computed(() =>
+  commodities.value.reduce((sum, item) => sum + num(item.amount), 0),
+)
+const upCount = computed(
+  () => commodities.value.filter((item) => num(item.changePct) > 0).length,
+)
+const downCount = computed(
+  () => commodities.value.filter((item) => num(item.changePct) < 0).length,
+)
+const clockText = computed(() =>
+  now.value.toLocaleTimeString('zh-CN', { hour12: false }),
+)
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -77,12 +97,16 @@ const loadCommodities = async () => {
 
 const loadMarket = async () => {
   if (!currentId.value) return
-  const [bookData, trades] = await Promise.all([
+  const [bookData, trades, candleData, statusData] = await Promise.all([
     api.book(currentId.value, 10),
     api.marketTrades(currentId.value, 50),
+    api.candles(currentId.value, 60),
+    api.status(),
   ])
   book.value = bookData
   marketTrades.value = trades
+  candles.value = candleData
+  engine.value = statusData
 }
 
 const loadAccount = async () => {
@@ -127,6 +151,7 @@ const handleSocketMessage = (message) => {
           price: message.price,
           quantity: message.quantity,
           amount: message.amount,
+          side: message.side,
           createTime: message.time,
         },
         ...marketTrades.value,
@@ -178,6 +203,7 @@ const selectCommodity = async (commodityId) => {
   currentId.value = commodityId
   book.value = { bids: [], asks: [] }
   marketTrades.value = []
+  candles.value = []
   await loadMarket().catch(() => {})
   subscribe(commodityId)
 }
@@ -252,6 +278,9 @@ onMounted(async () => {
     ElMessage.error(`初始化失败：${error.message}`)
   }
   connectSocket()
+  clockTimer = window.setInterval(() => {
+    now.value = new Date()
+  }, 1000)
   marketTimer = window.setInterval(() => {
     loadCommodities().catch(() => {})
     loadMarket().catch(() => {})
@@ -265,6 +294,7 @@ onBeforeUnmount(() => {
   destroyed = true
   window.clearInterval(marketTimer)
   window.clearInterval(accountTimer)
+  window.clearInterval(clockTimer)
   window.clearTimeout(reconnectTimer)
   window.clearTimeout(accountRefreshTimer)
   socket?.close()
@@ -275,6 +305,7 @@ onBeforeUnmount(() => {
   <div class="app-shell">
     <header class="topbar">
       <div class="brand">
+        <span class="live-badge"><i class="live-dot"></i>LIVE</span>
         ClearHub
         <span>交易核心演示</span>
       </div>
@@ -306,8 +337,48 @@ onBeforeUnmount(() => {
     </header>
 
     <template v-if="view === 'trade'">
+      <div class="market-pulse">
+        <span class="pulse-item"><i class="pulse-dot"></i> 交易中</span>
+        <span class="pulse-item">总成交额 <b>{{ fmt(totalAmount, 0) }}</b></span>
+        <span class="pulse-item">总成交量 <b>{{ fmtQty(totalVolume) }}</b></span>
+        <span class="pulse-item">上涨 <b class="up">{{ upCount }}</b> · 下跌 <b class="down">{{ downCount }}</b></span>
+        <span class="pulse-item">行情源 <b>撮合引擎 + MySQL</b></span>
+        <span class="pulse-item">系统时间 <b>{{ clockText }}</b></span>
+      </div>
       <main class="layout">
-      <MarketList :commodities="commodities" :current-id="currentId" @select="selectCommodity" />
+      <div class="left-column">
+        <MarketList :commodities="commodities" :current-id="currentId" @select="selectCommodity" />
+        <div class="panel engine-card">
+          <div class="panel-head">
+            <span>撮合引擎</span>
+            <span class="engine-state"><i class="live-dot"></i>运行中</span>
+          </div>
+          <div class="engine-grid">
+            <div class="engine-cell">
+              <label>累计委托</label>
+              <strong>{{ engine?.orders ?? '--' }}</strong>
+            </div>
+            <div class="engine-cell">
+              <label>累计成交</label>
+              <strong>{{ engine?.trades ?? '--' }}</strong>
+            </div>
+            <div class="engine-cell">
+              <label>未完成委托</label>
+              <strong>{{ engine?.openOrders ?? '--' }}</strong>
+            </div>
+            <div class="engine-cell">
+              <label>账户 / 商品</label>
+              <strong>{{ engine?.firms ?? '--' }} / {{ engine?.commodities ?? '--' }}</strong>
+            </div>
+          </div>
+          <div class="engine-rules">
+            <span>价格优先</span>
+            <span>时间优先</span>
+            <span>被动方定价</span>
+          </div>
+          <div class="engine-foot">内存订单簿 · MySQL 持久化 · WebSocket 推送</div>
+        </div>
+      </div>
 
       <section class="center">
         <div class="panel">
@@ -323,6 +394,10 @@ onBeforeUnmount(() => {
               </div>
             </div>
             <div class="quote-cell">
+              <label>今开</label>
+              <strong>{{ fmt(currentCommodity?.openPrice) }}</strong>
+            </div>
+            <div class="quote-cell">
               <label>最高</label>
               <strong>{{ fmt(currentCommodity?.highPrice) }}</strong>
             </div>
@@ -331,17 +406,21 @@ onBeforeUnmount(() => {
               <strong>{{ fmt(currentCommodity?.lowPrice) }}</strong>
             </div>
             <div class="quote-cell">
-              <label>成交量</label>
-              <strong>{{ fmt(currentCommodity?.volume, 0) }}</strong>
-            </div>
-            <div class="quote-cell">
               <label>成交额</label>
               <strong>{{ fmt(currentCommodity?.amount, 0) }}</strong>
+            </div>
+            <div class="quote-cell">
+              <label>买一</label>
+              <strong class="up">{{ fmt(bestBid) }}</strong>
+            </div>
+            <div class="quote-cell">
+              <label>卖一</label>
+              <strong class="down">{{ fmt(bestAsk) }}</strong>
             </div>
           </div>
         </div>
 
-        <PriceChart :trades="marketTrades" :last-price="lastPrice" />
+        <PriceChart :candles="candles" :last-price="lastPrice" :commodity="currentCommodity" />
 
         <div class="book-wrap">
           <OrderBook :book="book" :last-price="lastPrice" @pick="pickPrice" />
@@ -349,33 +428,36 @@ onBeforeUnmount(() => {
         </div>
       </section>
 
-      <OrderForm
-        ref="orderFormRef"
-        :commodity="currentCommodity"
-        :funds="funds"
-        :position="currentPosition"
-        :best-bid="bestBid"
-        :best-ask="bestAsk"
-        @submit="placeOrder"
-      />
+      <div class="right-column">
+        <OrderForm
+          ref="orderFormRef"
+          :commodity="currentCommodity"
+          :funds="funds"
+          :position="currentPosition"
+          :best-bid="bestBid"
+          :best-ask="bestAsk"
+          @submit="placeOrder"
+        />
+        <MarketInfo :commodity="currentCommodity" :book="book" />
+      </div>
     </main>
 
     <section class="bottom">
       <div class="panel">
         <el-tabs v-model="tab">
-          <el-tab-pane label="我的委托" name="orders">
+          <el-tab-pane :label="`我的委托 (${orders.length})`" name="orders">
             <OrdersTable :orders="orders" @cancel="cancelOrder" />
           </el-tab-pane>
-          <el-tab-pane label="我的成交" name="trades">
+          <el-tab-pane :label="`我的成交 (${myTrades.length})`" name="trades">
             <TradesTable :trades="myTrades" />
           </el-tab-pane>
-          <el-tab-pane label="持仓" name="positions">
+          <el-tab-pane :label="`持仓 (${positions.length})`" name="positions">
             <PositionsTable :positions="positions" />
           </el-tab-pane>
           <el-tab-pane label="资金" name="funds">
             <FundsPanel :funds="funds" :firm-name="firmName" />
           </el-tab-pane>
-          <el-tab-pane label="资金流水" name="flows">
+          <el-tab-pane :label="`资金流水 (${flows.length})`" name="flows">
             <FlowsTable :flows="flows" />
           </el-tab-pane>
         </el-tabs>
@@ -392,8 +474,9 @@ onBeforeUnmount(() => {
           :style="{ background: wsConnected ? 'var(--down)' : 'var(--warn)' }"
         ></span>
         {{ wsConnected ? '实时推送已连接' : '实时推送重连中，已启用轮询兜底' }}
-        · 模拟做市商每 3 秒双边报价
+        · {{ view === 'trade' ? '模拟做市商 + 模拟交易员持续成交' : '清算所适配器 + 模拟银行' }}
       </span>
+      <span class="footer-mid">撮合引擎 · MySQL · 实时行情</span>
       <span>
         演示环境 · 非生产系统 ·
         <a href="/swagger-ui.html" target="_blank" style="color: var(--accent)">API 文档</a>

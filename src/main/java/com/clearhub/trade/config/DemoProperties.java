@@ -18,6 +18,7 @@ public class DemoProperties {
     private boolean seedOnStart = true;
     private boolean resetEnabled = true;
     private MarketMaker marketMaker = new MarketMaker();
+    private FlowTrader flowTrader = new FlowTrader();
     private List<AccountSeed> accounts = new ArrayList<>();
 
     @Getter
@@ -31,6 +32,16 @@ public class DemoProperties {
         private int minQuantity = 10;
         private int maxQuantity = 60;
         private double maxPriceDrift = 0.004;
+    }
+
+    @Getter
+    @Setter
+    public static class FlowTrader {
+        private boolean enabled = true;
+        private Long firmId = 4L;
+        private long intervalMs = 2500;
+        private int minQuantity = 5;
+        private int maxQuantity = 30;
     }
 
     @Getter
