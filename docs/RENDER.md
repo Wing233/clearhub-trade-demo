@@ -35,6 +35,7 @@ https://render.com/deploy?repo=https://github.com/Wing233/clearhub-trade-demo
 ## 注意事项
 
 - 免费实例 15 分钟无请求会休眠，首次访问冷启动约 30–60 秒。
+- 仓库自带 `.github/workflows/keepalive.yml`，每 5 分钟请求一次健康检查，避免演示期间休眠；不需要时删除该 workflow 即可。
 - H2 是内存库，重启/重新部署会清空交易、清算和银行数据，只保留种子账户。
 - 适配器/模拟银行是进程内演示实现，不再有独立的 8090/8091 服务。
 - 免费实例 CPU/内存有限，已把 JVM 限制为 `-Xmx192m`；不要同时打开大量标签页。
