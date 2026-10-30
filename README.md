@@ -25,6 +25,23 @@ docker compose logs -f trade-core  # 查看后端日志
 python scripts/api-smoke.py --base-url http://127.0.0.1:8088
 ```
 
+## Render 单服务演示（免费 512MB）
+
+如果不想维护 5 个容器，`Dockerfile.render` 可以把撮合、清算适配器、模拟银行和前端合并进一个 Spring Boot 进程，使用 H2 内存库：
+
+- 单容器、单端口，前端静态资源和 API 同源；
+- `integration.mode=embedded`，清算回执 `CH-...` 和银行流水 `MB...` 仍可用；
+- 适配 Render 免费实例的 512MB 内存（JVM 限制 192MB 堆）；
+- 免费实例会休眠，重启后恢复初始演示数据。
+
+部署文件：`render.yaml`、`Dockerfile.render`，详细说明见 [docs/RENDER.md](docs/RENDER.md)。
+
+```bash
+docker build -f Dockerfile.render -t clearhub-render .
+docker run --rm -p 18080:10000 clearhub-render
+python scripts/api-smoke.py --base-url http://127.0.0.1:18080
+```
+
 ## 演示内容
 
 | 能力 | 说明 |
@@ -103,6 +120,7 @@ python scripts/ui-smoke.py                    # Playwright 页面冒烟（需先
 - [接口与 WebSocket 协议](docs/API.md)
 - [5 分钟演示脚本](docs/DEMO.md)
 - [服务器部署与运维](docs/DEPLOY.md)
+- [Render 单服务部署](docs/RENDER.md)
 - [测试报告](docs/TEST-REPORT.md)
 - [验收清单](docs/ACCEPTANCE.md)
 - [与原系统的差异](docs/COMPATIBILITY.md)

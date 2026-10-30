@@ -23,7 +23,8 @@ demo:
     enabled: true
 
 integration:
-  enabled: false
+  enabled: true
+  mode: embedded
 
 logging:
   level:

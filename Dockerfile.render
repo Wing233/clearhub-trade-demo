@@ -1,0 +1,23 @@
+# syntax=docker/dockerfile:1
+
+FROM maven:3.9-eclipse-temurin-17 AS build
+WORKDIR /build
+COPY pom.xml .
+COPY src ./src
+RUN mvn -B -q -DskipTests package
+
+FROM eclipse-temurin:17-jre-jammy
+WORKDIR /app
+COPY --from=build /build/target/trade-core.jar /app/trade-core.jar
+COPY web/dist /app/static
+
+ENV TZ=Asia/Shanghai \
+    SPRING_PROFILES_ACTIVE=h2 \
+    SPRING_WEB_RESOURCES_STATIC_LOCATIONS=file:/app/static/ \
+    JAVA_OPTS="-Xms48m -Xmx192m -XX:MaxMetaspaceSize=96m -Xss512k -XX:MaxDirectMemorySize=32m -XX:+UseSerialGC -XX:ActiveProcessorCount=1" \
+    PORT=10000 \
+    DEMO_RESET_ENABLED=true
+
+EXPOSE 10000
+
+ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar /app/trade-core.jar"]

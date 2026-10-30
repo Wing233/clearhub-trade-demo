@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 public class IntegrationProperties {
 
     private boolean enabled = true;
+    private String mode = "http";
     private String adapterBaseUrl = "http://127.0.0.1:8090";
     private int timeoutMs = 5000;
 }

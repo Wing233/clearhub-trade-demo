@@ -1,5 +1,5 @@
 server:
-  port: ${SERVER_PORT:8080}
+  port: ${PORT:${SERVER_PORT:8080}}
   shutdown: graceful
 
 spring:
@@ -53,6 +53,7 @@ springdoc:
 
 integration:
   enabled: ${INTEGRATION_ENABLED:true}
+  mode: ${INTEGRATION_MODE:http}
   adapter-base-url: ${ADAPTER_BASE_URL:http://127.0.0.1:8090}
   timeout-ms: ${ADAPTER_TIMEOUT_MS:5000}
 

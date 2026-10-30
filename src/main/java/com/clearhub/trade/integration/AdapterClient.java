@@ -1,7 +1,9 @@
 package com.clearhub.trade.integration;
 
+import com.clearhub.trade.embedded.EmbeddedAdapterService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
@@ -19,20 +21,30 @@ public class AdapterClient {
 
     private final RestTemplate integrationRestTemplate;
     private final IntegrationProperties properties;
+    private final ObjectProvider<EmbeddedAdapterService> embeddedAdapterProvider;
 
     public boolean isEnabled() {
         return properties.isEnabled();
     }
 
     public AdapterBankResponse deposit(AdapterBankRequest request) {
+        if (isEmbedded()) {
+            return embedded().deposit(request);
+        }
         return post("/adapter/bank/deposit", request, AdapterBankResponse.class, "deposit");
     }
 
     public AdapterBankResponse withdraw(AdapterBankRequest request) {
+        if (isEmbedded()) {
+            return embedded().withdraw(request);
+        }
         return post("/adapter/bank/withdraw", request, AdapterBankResponse.class, "withdraw");
     }
 
     public AdapterSettleResponse settle(AdapterSettleRequest request) {
+        if (isEmbedded()) {
+            return embedded().settle(request);
+        }
         try {
             AdapterSettleResponse response = integrationRestTemplate.postForObject(
                     url("/adapter/clearing/settle"), request, AdapterSettleResponse.class);
@@ -47,6 +59,9 @@ public class AdapterClient {
     }
 
     public Map<String, Object> health() {
+        if (isEmbedded()) {
+            return embedded().health();
+        }
         try {
             return integrationRestTemplate.getForObject(url("/adapter/health"), Map.class);
         } catch (RestClientException ex) {
@@ -56,6 +71,9 @@ public class AdapterClient {
     }
 
     public List<AdapterAccountDto> accounts() {
+        if (isEmbedded()) {
+            return embedded().accounts();
+        }
         try {
             ResponseEntity<List<AdapterAccountDto>> response = integrationRestTemplate.exchange(
                     url("/adapter/accounts"),
@@ -71,6 +89,9 @@ public class AdapterClient {
     }
 
     public boolean reset() {
+        if (isEmbedded()) {
+            return embedded().reset();
+        }
         try {
             integrationRestTemplate.postForObject(url("/adapter/reset"), null, Map.class);
             return true;
@@ -78,6 +99,18 @@ public class AdapterClient {
             log.warn("Adapter reset failed: {}", ex.getMessage());
             return false;
         }
+    }
+
+    private boolean isEmbedded() {
+        return "embedded".equalsIgnoreCase(properties.getMode());
+    }
+
+    private EmbeddedAdapterService embedded() {
+        EmbeddedAdapterService adapter = embeddedAdapterProvider.getIfAvailable();
+        if (adapter == null) {
+            throw new IllegalStateException("integration.mode=embedded but embedded adapter is not available");
+        }
+        return adapter;
     }
 
     private <T> T post(String path, Object body, Class<T> type, String action) {
