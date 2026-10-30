@@ -13,7 +13,7 @@ services:
       - key: SPRING_WEB_RESOURCES_STATIC_LOCATIONS
         value: file:/app/static/
       - key: JAVA_OPTS
-        value: -Xms48m -Xmx192m -XX:MaxMetaspaceSize=96m -Xss512k -XX:MaxDirectMemorySize=32m -XX:+UseSerialGC -XX:ActiveProcessorCount=1
+        value: "-Xms48m -Xmx192m -XX:MaxMetaspaceSize=96m -Xss512k -XX:MaxDirectMemorySize=32m -XX:+UseSerialGC -XX:ActiveProcessorCount=1"
       - key: DEMO_RESET_ENABLED
         value: "true"
       - key: DEMO_MM_ENABLED

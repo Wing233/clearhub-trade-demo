@@ -36,6 +36,8 @@ python scripts/api-smoke.py --base-url http://127.0.0.1:8088
 
 部署文件：`render.yaml`、`Dockerfile.render`，详细说明见 [docs/RENDER.md](docs/RENDER.md)。
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Wing233/clearhub-trade-demo)
+
 ```bash
 docker build -f Dockerfile.render -t clearhub-render .
 docker run --rm -p 18080:10000 clearhub-render

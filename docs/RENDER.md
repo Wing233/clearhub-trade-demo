@@ -29,7 +29,7 @@ Render Web Service (Docker)
 也可以直接使用：
 
 ```text
-https://render.com/deploy?repo=https://github.com/<你的账号>/<仓库名>
+https://render.com/deploy?repo=https://github.com/Wing233/clearhub-trade-demo
 ```
 
 ## 注意事项
